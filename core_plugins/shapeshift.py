@@ -101,14 +101,15 @@ class Shapeshift(BasePlugin):
 			{'description': 'ShapeShift', 'callback': self.shapeshift},
 			{'description': 'ShapeShift (fixed amount)', 'callback': self.shapeshift_fixed},
 			{'description': 'Check deposit status', 'callback': self._prompt_get_deposit_status},
-			{'description': 'Send email receipt', 'callback': self._prompt_send_email_receipt},
+			{'description': 'Request email receipt', 'callback': self._prompt_send_email_receipt},
 			{'description': 'Stop ShapeShifting', 'callback': self.cleanup}
 		]
 		running = True
 		while running:
 			try:
 				disp = [d['description'] for d in menu]
-				choice = self.prompt(disp, title='\nShapeShift Menu\n', choicemsg='(number)-> ')
+				choice = self.prompt(disp, title='ShapeShift Menu\n', choicemsg='What is your choice? ')
+				print('')# add a blank line to separate out the function call text
 				try:
 					menu[choice]['callback']()
 				except KeyboardInterrupt:
@@ -202,7 +203,7 @@ class Shapeshift(BasePlugin):
 		
 		howmuch = None
 		while howmuch is None:
-			howmuch = raw_input('\nHow much would you like to shift -- you can shift up to {} (\'m\' to use max)? '.format(amnt)).strip()
+			howmuch = raw_input('\nHow many would you like to shift -- you can shift up to {} (\'m\' to use max)? '.format(amnt)).strip()
 			if howmuch == '':
 				howmuch = amnt
 			try:
@@ -280,7 +281,7 @@ class Shapeshift(BasePlugin):
 		self.coinB = disp[choice][0].lower()
 		coinpair = '{}_{}'.format(self.coinA, self.coinB)
 		
-		amnt = raw_input('How much {} would you like? '.format(self.coinB.upper())).strip()
+		amnt = raw_input('How many {} would you like? '.format(self.coinB.upper())).strip()
 		
 		if self.coinA_withdrawal_address_func:
 			withdrawal_addy = self.coinA_withdrawal_address_func(self.coinB, address_validator=self.is_address_valid)
@@ -389,7 +390,7 @@ class Shapeshift(BasePlugin):
 		self.output('Status: {}{}{}'.format(
 			status['status'], 
 			'\nIncoming: {} {}'.format(status['incomingCoin'], status['incomingType']) if 'incomingCoin' in status.keys() else '', 
-			'\n\nOutgoing: {} {}\nOutgoing TX: {}\n'.format(status['outgoingCoin'], status['outgoingType'], status['transaction']) if 'transaction' in status.keys() else ''
+			'\n\nOutgoing: {} {}\nOutgoing TX: {}'.format(status['outgoingCoin'], status['outgoingType'], status['transaction']) if 'transaction' in status.keys() else ''
 		))
 		# check to see if we can add the outgoing tx hash to existing history
 		if status['address'] in self.history.keys():
@@ -427,7 +428,10 @@ class Shapeshift(BasePlugin):
 			print('Error contacting the API server (wait a minute if you\'ve just created the transaction)')
 			return None
 			
-		self.output('Status: {}\nMessage: {}'.format(receipt['email']['status'], receipt['email']['message']))
+		if 'error' in receipt.keys():
+			self.output('ShapeShift API Error: {}'.format(receipt['error']))
+		else:
+			self.output('Status: {}\nMessage: {}'.format(receipt['email']['status'], receipt['email']['message']))
 	
 	def get_supported_coins(self):
 		return self._call('get', 'getcoins')

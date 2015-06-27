@@ -17,7 +17,7 @@ class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 		try:
 			return super(BitcoinRPCProxy, self)._call(service_name, *args)
 		except bitcoin.rpc.JSONRPCException as e:
-			msg = '[Error {}]: {}'.format(e.error['code'], e.error['message'])
+			msg = '{}'.format(e.error['message'])
 			border = '*' * len(msg)
 			print('\n{0}\n{1}\n{0}'.format(border, msg))
 			return False
@@ -162,7 +162,7 @@ class Bitcoin(BasePlugin):
 			if btci['unlocked_until'] == 0:
 				outs += '\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.\n'
 			else:
-				timeremaining = int(time.time()) - int(btci['unlocked_until'])
+				timeremaining = int(btci['unlocked_until']) - int(time.time())
 				outs += '\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds, at which time it will fade from my memory.\n'.format(timeremaining)
 			self.encrypted_wallet = True
 		except KeyError as e:
@@ -194,7 +194,6 @@ class Bitcoin(BasePlugin):
 		
 		isvalid = vret['isvalid']
 		while not isvalid:
-			print('Address is not valid for {}'.format(coin))
 			print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(withdrawal_addy))
 			
 			ltb_addy = self.get_address_by_ltb_user(withdrawal_addy)
@@ -261,7 +260,7 @@ class Bitcoin(BasePlugin):
 		
 		return stx['hex']
 	
-	def	broadcast_tx(self, stx):
+	def broadcast_tx(self, stx):
 		tx = self.access._call('sendrawtransaction', stx)
 		return tx
 	
@@ -407,7 +406,9 @@ class Bitcoin(BasePlugin):
 			else:
 				duration = 120 # default to 2 minutes
 				
-			self.access.walletpassphrase(wallet_passphrase, int(duration))
+			isvalid = self.access.walletpassphrase(wallet_passphrase, int(duration))
+			if isvalid == False: # isvalid == None is a valid response...
+				return False
 		except bitcoin.rpc.JSONRPCException as e:
 			self.output('[code {}] {}'.format(e.error['code'], e.error['message']))
 			return False
@@ -416,7 +417,7 @@ class Bitcoin(BasePlugin):
 			self.output('I have successfully unlocked your wallet for {} seconds.').format(duration)
 		return True
 	
-	def try_unlock_wallet(self, printsuccess=False, modify_duration=False):
+	def try_unlock_wallet(self, printsuccess=False, modify_duration=False, ask_until_correct=True):
 		'''
 		attempt to unlock the wallet
 		return true if the wallet is not encrypted, is currently unlocked, or the user successfully unlocks it
@@ -426,9 +427,13 @@ class Bitcoin(BasePlugin):
 			info = self.access.getinfo()
 			if info['unlocked_until'] == 0:
 				if not self.unlock_wallet(printsuccess=printsuccess, modify_duration=modify_duration):
-					print('Error unlocking wallet...')
-					return False
-			#if info['unlocked_utnil'] > ensure we have enough time to sign and broadcast...
+					if ask_until_correct:
+						correct = False
+						while not correct:
+							correct = self.unlock_wallet(printsuccess=printsuccess, modify_duration=modify_duration)
+					else:
+						return False
+			#if info['unlocked_until'] > ensure we have enough time to sign and broadcast...
 		except KeyError:
 			pass # wallet is unlocked
 		return True

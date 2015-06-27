@@ -182,9 +182,9 @@ class Counterparty(BasePlugin):
 	def get_div_locked(self, asset):
 		payload = {
 			"method": "get_issuances",
-	  		"params": {
-	    		"filters": {
-	      			'field': 'asset', 'op': '==', 'value': asset
+			"params": {
+				"filters": {
+					'field': 'asset', 'op': '==', 'value': asset
 				}
 			},
 			"jsonrpc": "2.0",
@@ -299,17 +299,17 @@ class Counterparty(BasePlugin):
 	
 	def send_asset(self, asset, amount, toaddress):
 		payload = {
-	  		"method": "create_send",
-	  		"params": {
+			"method": "create_send",
+			"params": {
 				"source": self.btc.selected_address,
 				"destination": toaddress,
 				"pubkey": self.btc.selected_address_info['pubkey'],
 				"asset": asset,
 				"quantity": amount,
 				"encoding": "auto",
-	  		},
-	  		"jsonrpc": "2.0",
-	  		"id": 0
+			},
+			"jsonrpc": "2.0",
+			"id": 0
 		}
 		
 		disp_amount = self.from_satoshis(amount) if self.get_divisibility(asset) else amount
@@ -554,7 +554,7 @@ class Counterparty(BasePlugin):
 			self.output('You do own any assets in this address ({}), so you cannot change the description of anything.'.format(self.btc.selected_address))
 			return None
 		
-		choice = self.prompt(assets, title='\nYou would like me to change the description for which owned asset? ', choicemsg='(number)-> ')
+		choice = self.prompt(assets, title='\nYou would like me to change the description for which owned asset? ', choicemsg='Which asset? ')
 		asset = assets[choice]
 		
 		desc = self.get_description(asset)
@@ -579,7 +579,7 @@ class Counterparty(BasePlugin):
 			}
 		}
 		disp_amnt = self.from_satoshis(amount) if divis else amount
-		if not self.confirm_prompt('Do you really want me to issue {} more {} ?'.format(disp_amnt, asset)):
+		if not self.confirm_prompt('Do you really want me to issue {} more {}?'.format(disp_amnt, asset)):
 			print('\naborted')
 			return None
 		
@@ -605,7 +605,7 @@ class Counterparty(BasePlugin):
 		if not assets:
 			print('All of the assets that you own are locked, so you cannot issue any more of anything.')
 			return None
-		choice = self.prompt(assets, title='Which asset would you like me to issue more of?', choicemsg='(number)-> ')
+		choice = self.prompt(assets, title='Which asset would you like me to issue more of?', choicemsg='Which asset? ')
 		asset = assets[choice]
 		
 		divis = self.get_divisibility(asset)
@@ -623,7 +623,7 @@ class Counterparty(BasePlugin):
 					except Exception as e:
 						print('{} is indivisible, you must enter a whole number: {} ({}).\n'.format(asset, e, type(e)))
 						amount = None
-			except Exception, e:
+			except Exception as e:
 				print('Exception: {}'.format(e))
 				amount = None
 		
@@ -701,7 +701,7 @@ class Counterparty(BasePlugin):
 			self.output('You do own any assets in this address ({}), so you cannot transfer anything.'.format(self.btc.selected_address))
 			return None
 		
-		choice = self.prompt(assets, title='\nWhich asset would you like to transfer', choicemsg='(number)-> ')
+		choice = self.prompt(assets, title='\nWhich asset would you like to transfer', choicemsg='Which asset? ')
 		asset = assets[choice]
 		
 		divis = self.get_divisibility(asset)

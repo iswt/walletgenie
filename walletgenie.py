@@ -258,7 +258,7 @@ class WalletGenie():
 			self.active_plugin = plugs[0]
 		else:
 			disp_plugs = [p[p.rfind('_')+1:] if '_' in p else p for p in plugs] #this works??
-			choice = self.prompt(disp_plugs, title='\nChoose a plugin\n')
+			choice = self.prompt(disp_plugs, title='\nChoose a plugin\n', choicemsg='Which plugin? ')
 			self.active_plugin = plugs[choice]
 		
 		self.update_plugins()
