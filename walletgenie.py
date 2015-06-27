@@ -253,7 +253,7 @@ class WalletGenie():
 				p
 			)
 			dest = '{}/{}.py'.format(PLUGINS_DIR, p)
-			os.symlink(os.path.relpath(src, dest), dest)
+			os.symlink(src, dest)
 		
 		self.plugins = sorted(self.find_plugins(plugin_dir = PLUGINS_DIR))
 		for p in self.unloaded_plugins:
