@@ -1,5 +1,6 @@
 from walletgenie_plugins import BasePlugin, WalletGenieConfig, WalletGenieConfigurationError
 
+import sys
 import time
 from getpass import getpass
 try:
