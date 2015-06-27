@@ -19,7 +19,7 @@ class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 		except bitcoin.rpc.JSONRPCException as e:
 			msg = '{}'.format(e.error['message'])
 			border = '*' * len(msg)
-			print('\n{0}\n{1}\n{0}'.format(border, msg))
+			print('\n{0}\n\n{1}\n\n{0}'.format(border, msg))
 			return False
 
 class Bitcoin(BasePlugin):
@@ -318,7 +318,7 @@ class Bitcoin(BasePlugin):
 	
 	def change_passphrase(self):
 		if not self.is_wallet_encrypted():
-			self.output('You wallet is not encrypted, I can\'t change it\'s passphrase!')
+			self.output('Your wallet is not encrypted, I can\'t change it\'s passphrase!')
 			return None
 			
 		old_passphrase = getpass('Please provide me with your current magic phrase: ')
@@ -364,7 +364,7 @@ class Bitcoin(BasePlugin):
 	
 	def encrypt_wallet(self):
 		if self.is_wallet_encrypted():
-			self.output('You wallet is already encrypted')
+			self.output('Your wallet is already encrypted')
 			return None
 		
 		confirmed = False
@@ -398,7 +398,7 @@ class Bitcoin(BasePlugin):
 	def unlock_wallet(self, printsuccess=False, printerrors=False, modify_duration=False):
 		if not self.is_wallet_encrypted():
 			if printerrors:
-				self.output('You wallet is not encrypted. It\'s been unlocked this entire time!')
+				self.output('Your wallet is not encrypted. It\'s been unlocked this entire time!')
 			return True
 			
 		try:

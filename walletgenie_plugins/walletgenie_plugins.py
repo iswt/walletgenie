@@ -199,7 +199,13 @@ class WalletGenieConfig(WalletGenie):
 		filepath = None
 		
 		try:
-			choice = self.prompt(['Enter values manually', 'Read from coin configuration file'], title='How would you like to create this configuration?\n', choicemsg='Which method? ')
+			prompt_disp = 'Read from coin configuration file'
+			if default_conf_loc:
+				if '/' in default_conf_loc:
+					prompt_disp = 'Read from {}'.format(default_conf_loc[default_conf_loc.rfind('/') + 1 : ])
+				else:
+					prompt_disp = default_conf_loc
+			choice = self.prompt(['Enter values manually', prompt_disp], title='How would you like to create this configuration?\n', choicemsg='Which method? ')
 			d = {}
 			if choice == 0:
 				if not config_vars:
