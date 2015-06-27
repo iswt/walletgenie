@@ -88,7 +88,7 @@ class Counterparty(BasePlugin):
 		wgc = WalletGenieConfig()
 		self.rpcd = wgc.check_and_load(self.config_file, required_values=self.required_config_vars, default_values=self.default_config_vars)
 		if self.rpcd is None:
-			print('\ncould not load {} !'.format(self.config_file))
+			print('\nIt appears that {} does not yet exist. If this is your first time running the walletgenie_counterparty plugin, you will need a config file detailing your RPC Connection information.\n'.format(self.config_file))
 			confvars = [(x, None) for x in self.required_config_vars if x not in self.default_config_vars.keys()]
 			confvars += self.default_config_vars.items()
 			wgc.set_from_coin_or_text(

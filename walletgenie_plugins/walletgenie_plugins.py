@@ -199,7 +199,7 @@ class WalletGenieConfig(WalletGenie):
 		filepath = None
 		
 		try:
-			choice = self.prompt(['Enter values manually', 'Choose coin configuration to read from'], title='How do you want to enter credentials?\n', choicemsg='(number)-> ')
+			choice = self.prompt(['Enter values manually', 'Read from coin configuration file'], title='How would you like to create this configuration?\n', choicemsg='Which method? ')
 			d = {}
 			if choice == 0:
 				if not config_vars:
@@ -240,11 +240,18 @@ class WalletGenieConfig(WalletGenie):
 				try:
 					d = self.read_coin_config(filepath, header=coin_conf_header)
 					if config_vars:
+						outd = {}
 						for var, default_value in config_vars:
-							if var not in d.keys() and default_value:
+							if var not in d.keys() and default_value is not None:
 								d[var] = default_value
+							try:
+								outd[var] = d[var]
+							except KeyError as e:
+								print('Cannot read value from configuration file: {}'.format(e))
+					else:
+						outd = d
 					
-					self.setConfig(out_config, d)
+					self.setConfig(out_config, outd)
 				except IOError as e:
 					print('Error reading configuration file {}: {}\n'.format(filepath, e))
 					filepath = None
@@ -278,3 +285,5 @@ class WalletGenieConfig(WalletGenie):
 					print('IOError writing {}: {}'.format(conffile, e))
 			else:
 				print('IOError writing {}: {}'.format(conffile, e))
+		
+		print('Successfully wrote {} at {}'.format(config_file, config_dir))

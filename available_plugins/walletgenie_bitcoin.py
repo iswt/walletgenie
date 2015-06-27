@@ -67,6 +67,22 @@ class Bitcoin(BasePlugin):
 			7: {
 				'description': 'Genie, I wish to create a new address into which I can receive more bitcoin.',
 				'callback': self.get_new_address
+			},
+			8: {
+				'description': 'Genie, I wish to unlock my wallet so you can perform some transactions on my behalf.',
+				'callback': lambda printsuccess=True, printerrors=True, modify_duration=True: self.unlock_wallet(printsuccess, printerrors, modify_duration)
+			},
+			9: {
+				'description': 'Genie, I wish to lock my wallet to keep my bitcoin safe from thieves.',
+				'callback': lambda printerrors=True: self.try_lock_wallet(printerrors)
+			},
+			10: {
+				'description': 'Genie, I wish to protect my bitcoin coffers with a magic phrase. Keep my bitcoin safe from thieves. TNO.',
+				'callback': self.encrypt_wallet
+			},
+			11: {
+				'description': 'Genie, I wish to change my magic phrase. There are scoundrels all around.',
+				'callback': self.change_passphrase
 			}
 		}
 		
@@ -77,7 +93,7 @@ class Bitcoin(BasePlugin):
 		wgc = WalletGenieConfig()
 		self.rpcd = wgc.check_and_load(self.config_file, required_values=self.required_config_vars, default_values=self.default_config_vars)
 		if self.rpcd is None:
-			print('\ncould not load {} !'.format(self.config_file))
+			print('\nIt appears that {} does not yet exist. If this is your first time running the walletgenie_bitcoin plugin, you will need a configuration file detailing your RPC Connection information.\n'.format(self.config_file))
 			confvars = [(x, None) for x in self.required_config_vars if x not in self.default_config_vars.keys()]
 			confvars += self.default_config_vars.items()
 			wgc.set_from_coin_or_text(
@@ -94,21 +110,6 @@ class Bitcoin(BasePlugin):
 				'https' if int(self.rpcd['rpcssl']) else 'http', self.rpcd['rpcuser'], self.rpcd['rpcpassword'], self.rpcd['rpcurl'], self.rpcd['rpcport']
 			)
 		)
-		lastkeyh = sorted(self.main_menu.iteritems(), key=lambda x: x[0])[-1][0]
-		if self.is_wallet_encrypted():
-			self.main_menu[lastkeyh + 1] = {
-				'description': 'Genie, I wish to unlock my wallet so you can perform some transactions on my behalf.',
-				'callback': self.unlock_wallet
-			}
-			self.main_menu[lastkeyh + 2] = {
-				'description': 'Genie, I wish to change my magic phrase. There are scoundrels all around.',
-				'callback': self.change_passphrase
-			}
-		else:
-			self.main_menu[lastkeyh + 1] = {
-				'description': 'Genie, I wish to protect my bitcoin coffers with a magic phrase. Keep my bitcoin safe from thieves. TNO.',
-				'callback': self.encrypt_wallet
-			}
 	
 	def choose_address(self):
 		active_addresses = self.get_wallet_addresses()
@@ -163,7 +164,7 @@ class Bitcoin(BasePlugin):
 				outs += '\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.\n'
 			else:
 				timeremaining = int(btci['unlocked_until']) - int(time.time())
-				outs += '\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds, at which time it will fade from my memory.\n'.format(timeremaining)
+				outs += '\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds, at which time it will fade from my memory.'.format(timeremaining)
 			self.encrypted_wallet = True
 		except KeyError as e:
 			outs += "\nYour local wallet is not protected by a magic phrase. Your wish is my command."
@@ -316,6 +317,10 @@ class Bitcoin(BasePlugin):
 		return tx
 	
 	def change_passphrase(self):
+		if not self.is_wallet_encrypted():
+			self.output('You wallet is not encrypted, I can\'t change it\'s passphrase!')
+			return None
+			
 		old_passphrase = getpass('Please provide me with your current magic phrase: ')
 		confirmed = False
 		while not confirmed:
@@ -358,6 +363,10 @@ class Bitcoin(BasePlugin):
 		return active # returns a list of tuples [(address, btc balance), ...]
 	
 	def encrypt_wallet(self):
+		if self.is_wallet_encrypted():
+			self.output('You wallet is already encrypted')
+			return None
+		
 		confirmed = False
 		while not confirmed:
 			encrypt_passphrase = getpass('Please provide me with your magic phrase. I will use it to encrypt your wallet: ')
@@ -386,7 +395,12 @@ class Bitcoin(BasePlugin):
 			self.output('[code {}] {}'.format(e.error['code'], e.error['message']))
 			return False
 	
-	def unlock_wallet(self, printsuccess=False, modify_duration=False):
+	def unlock_wallet(self, printsuccess=False, printerrors=False, modify_duration=False):
+		if not self.is_wallet_encrypted():
+			if printerrors:
+				self.output('You wallet is not encrypted. It\'s been unlocked this entire time!')
+			return True
+			
 		try:
 			wallet_passphrase = None
 			duration = None
@@ -394,9 +408,9 @@ class Bitcoin(BasePlugin):
 				wallet_passphrase = getpass('Please tell me your magic phrase. I promise not to tell anyone: ')
 			if modify_duration:
 				while duration is None:
-					duration = raw_input('How long shall I keep the wallet unlocked (seconds)? [default: 60]: ')
+					duration = raw_input('How long shall I keep the wallet unlocked (seconds)? [default: 300]: ')
 					if duration == '':
-						duration = 60
+						duration = 300
 					else:
 						try:
 							assert int(duration)
@@ -414,7 +428,7 @@ class Bitcoin(BasePlugin):
 			return False
 		
 		if printsuccess:
-			self.output('I have successfully unlocked your wallet for {} seconds.').format(duration)
+			self.output('I have successfully unlocked your wallet for {} seconds.'.format(duration))
 		return True
 	
 	def try_unlock_wallet(self, printsuccess=False, modify_duration=False, ask_until_correct=True):
@@ -438,8 +452,10 @@ class Bitcoin(BasePlugin):
 			pass # wallet is unlocked
 		return True
 	
-	def try_lock_wallet(self):
+	def try_lock_wallet(self, printerrors=False):
 		if not self.is_wallet_encrypted():
+			if printerrors:
+				self.output('Your wallet is not encrypted. It\'s been unlocked this entire time!')
 			return True
 		
 		try:

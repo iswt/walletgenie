@@ -204,7 +204,7 @@ class WalletGenie():
 		try:
 			plug = loaded_class(self.plugins, self.loaded_plugins, self.active_plugin, self.load_plugin)
 		except Exception as e:
-			print('Error initiating {}: {}'.format(plugin, e))
+			print('Error initiating {}: [{}] {}'.format(plugin, type(e), e))
 			return None
 			
 		self.active_plugin = plugin
