@@ -8,6 +8,21 @@ if 'HOME' in os.environ:
 	USER_DIR = os.path.join(USER_HOME, '.walletgenie')
 elif 'APPDATA' in os.environ or 'LOCALAPPDATA' in os.environ:
 	USER_DIR = os.path.join(USER_HOME, 'Walletgenie')
+	
+	# We're on windows, set the os.symlink appropriately
+	# see: http://stackoverflow.com/a/28382515
+	def symlink_ms(source, link_name):
+		import ctypes
+		csl = ctypes.windll.kernel32.CreateSymbolicLinkW
+		csl.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32)
+		csl.restype = ctypes.c_ubyte
+		flags = 1 if os.path.isdir(source) else 0
+		try:
+			if csl(link_name, source.replace('/', '\\'), flags) == 0:
+				raise ctypes.WinError()
+		except:
+			pass
+	os.symlink = symlink_ms
 else:
 	print('No home directory found in environment variables')
 	sys.exit(0)
@@ -20,7 +35,6 @@ CORE_PLUGINS_DIR = os.path.join(os.path.dirname(__file__), 'core_plugins')
 import time
 import datetime
 import pkgutil
-from shutil import copyfile
 
 import imp
 
@@ -87,9 +101,12 @@ class WalletGenie():
 					invalid = True
 			
 			for choice in choices:
-				src = '{}/{}.py'.format(available_plugin_path, aplugins[int(choice) - 1])
+				src = '{}/{}.py'.format(
+					os.path.relpath(AVAILABLE_PLUGINS_DIR, PLUGINS_DIR),
+					aplugins[int(choice) - 1]
+				)
 				dest = '{}/{}.py'.format(PLUGINS_DIR, aplugins[int(choice) - 1])
-				copyfile(src, dest)
+				os.symlink(src, dest)
 			# load the new plugins
 			self.plugins = sorted(self.find_plugins(plugin_dir = PLUGINS_DIR))
 			for p in self.plugins:
@@ -231,9 +248,12 @@ class WalletGenie():
 			return False
 			
 		for p in self.unloaded_plugins:
-			src = '{}/{}.py'.format(AVAILABLE_PLUGINS_DIR, p)
+			src = '{}/{}.py'.format(
+				os.path.relpath(AVAILABLE_PLUGINS_DIR, PLUGINS_DIR),
+				p
+			)
 			dest = '{}/{}.py'.format(PLUGINS_DIR, p)
-			copyfile(src, dest)
+			os.symlink(os.path.relpath(src, dest), dest)
 		
 		self.plugins = sorted(self.find_plugins(plugin_dir = PLUGINS_DIR))
 		for p in self.unloaded_plugins:
