@@ -25,15 +25,15 @@ walletgenie is released under the terms of the MIT license. See [LICENSE](https:
 Current requirements are python2.7, with individual plugins requiring more:
 
 * ShapeShift plugin: `requests`
-* bitcoin plugin: `python-bitcoinlib`, `requests` (if using LTB user search)
-* counterparty plugin: `requests`, `tabulate`
+* bitcoin plugin (walletgenie_bitcoin.py): `python-bitcoinlib`, `requests` (if using LTB user search)
+* counterparty plugin (walletgenie_counterparty.py): `requests`, `tabulate`
 
 ### Instructions ###
 
 * clone from github at https://github.com/iswt/walletgenie
   * Initial run will prompt you to enable plugin(s) and setup configuration files in your home directory (~/.walletgenie if on linux/unix/osx, %appdata%/walletgenie on Windows (see note below)
 * Additional plugins can be enabled (with "e") via the main menu when appropriate
-* Change between active plugins with "c", ShapeShift with "s", Quit with "q", <CTRL>-C to cancel/escape to prior menu
+* Change between active plugins with "c", ShapeShift with "s", Quit with "q", ^C to cancel/escape to prior menu
 
 The configuration files store information about the RPC connections walletgenie needs to make.
 

@@ -7,7 +7,7 @@ USER_HOME = expanduser('~')
 if 'HOME' in os.environ:
 	USER_DIR = os.path.join(USER_HOME, '.walletgenie')
 elif 'APPDATA' in os.environ or 'LOCALAPPDATA' in os.environ:
-	USER_DIR = os.path.join(USER_HOME, 'Walletgenie')
+	USER_DIR = os.path.join(os.environ['APPDATA'], 'Walletgenie')
 	
 	# We're on windows, set the os.symlink appropriately
 	# see: http://stackoverflow.com/a/28382515
