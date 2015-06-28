@@ -24,9 +24,9 @@ walletgenie is released under the terms of the MIT license. See [LICENSE](https:
 
 Current requirements are python2.7, with individual plugins requiring more:
 
-ShapeShift plugin: `requests`
-bitcoin plugin: `python-bitcoinlib`, `requests` (if using LTB user search)
-counterparty plugin: `requests`, `tabulate`
+* ShapeShift plugin: `requests`
+* bitcoin plugin: `python-bitcoinlib`, `requests` (if using LTB user search)
+* counterparty plugin: `requests`, `tabulate`
 
 ### Instructions ###
 
