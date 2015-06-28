@@ -179,7 +179,7 @@ class Shapeshift(BasePlugin):
 				withdrawal_addy = raw_input('\nWhat address would you like to receive your {} to? '.format(self.coinB.upper()))
 				vret = self.is_address_valid(withdrawal_addy, self.coinB)
 			
-		ret_addy = raw_input('Return address in case of problems (enter \'n\' generate a new one or leave blank for none [not recommended])?\n')
+		ret_addy = raw_input('Return address in case of problems (enter \'n\' generate a new one or leave blank for none [not recommended])?')
 		if ret_addy == '':
 			ret_addy = None
 		elif ret_addy.lower() == 'n':
@@ -304,7 +304,7 @@ class Shapeshift(BasePlugin):
 				withdrawal_addy = raw_input('\nWhat address would you like to receive your {} to? '.format(self.coinB.upper()))
 				vret = self.is_address_valid(withdrawal_addy, self.coinB)
 		
-		ret_addy = raw_input('Return address in case of problems (enter \'n\' generate a new one or leave blank for none [not recommended])?\n')
+		ret_addy = raw_input('Return address in case of problems (enter \'n\' generate a new one or leave blank for none [not recommended])?')
 		if ret_addy == '':
 			ret_addy = None
 		elif ret_addy.lower() == 'n':

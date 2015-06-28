@@ -191,6 +191,18 @@ class Bitcoin(BasePlugin):
 		return self.access._call('getnewaddress', '')
 	
 	def shapeshift_withdrawal(self, coin, **kwargs):
+		if coin.upper() not in ['BTC', 'SJCX', 'GEMZ', 'SWARM', 'XCP']: # don't look for lets talk bitcoin users if they can't have a compatible address
+			withdrawal_addy = raw_input('To which address would you like to receive your {} to? '.format(coin.upper()))
+			vret = kwargs['address_validator'](withdrawal_addy, coin)
+			
+			isvalid = vret['isvalid']
+			while not isvalid:
+				print('Address entered is not a valid {} address'.format(coin.upper()))
+				withdrawal_addy = raw_input('To which address would you like to receive your {} to? '.format(coin.upper()))
+				vret = kwargs['address_validator'](withdrawal_addy, coin)
+				isvalid = vret['isvalid']
+			return withdrawal_addy
+		
 		withdrawal_addy = raw_input('To which address or Let\'s Talk Bitcoin! user would you like to receive your {} to? '.format(coin.upper()))
 		vret = kwargs['address_validator'](withdrawal_addy, coin)
 		
