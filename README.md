@@ -1,6 +1,10 @@
 # walletgenie #
 
-A CLI RPC Frontend to Bitcoin Core / Counterparty Server.
+Walletgenie is a CLI RPC frontend to digital currency daemons.
+
+Currently supports bitcoin-core and counterparty-server.
+
+![Walletgenie on Mac](http://i.imgur.com/LWYm8De.png "Walletgenie on Mac")
 
 ## License ##
 
