@@ -385,7 +385,7 @@ class Shapeshift(BasePlugin):
 			tup_disp += [('None', 'Enter address manually')]
 			
 			disp = [x[1] for x in tup_disp]
-			choice = self.prompt(disp, title='Get the status for which deposit address? (Most recent listed first)', choicemsg='(number)-> ')
+			choice = self.prompt(disp, title='Get the status for which deposit address? (Most recent listed first)', choicemsg='Which address? ')
 			if choice == len(tup_disp) - 1: 
 				address = raw_input('\nGet the status for which deposit address? ').strip()
 			else:
@@ -422,7 +422,7 @@ class Shapeshift(BasePlugin):
 					histtx.append(infod['outgoing_tx'])
 			if len(histtx) > 0:
 				disp = histtx + ['Enter transaction ID manually']
-				choice = self.prompt(disp, title='Transaction ID to use?', choicemsg='(number)-> ')
+				choice = self.prompt(disp, title='Transaction ID to use?', choicemsg='Which TX? ')
 				if choice == len(disp) - 1:
 					txid = raw_input('Transaction ID of your withdrawal (NOT your deposit): ').strip()
 				else:

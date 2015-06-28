@@ -75,7 +75,7 @@ class Bitcoin(BasePlugin):
 			},
 			9: {
 				'description': 'Genie, I wish to lock my wallet to keep my bitcoin safe from thieves.',
-				'callback': lambda printerrors=True: self.try_lock_wallet(printerrors)
+				'callback': lambda printsuccess=True, printerrors=True: self.try_lock_wallet(printsuccess, printerrors)
 			},
 			10: {
 				'description': 'Genie, I wish to protect my bitcoin coffers with a magic phrase. Keep my bitcoin safe from thieves. TNO.',
@@ -208,7 +208,14 @@ class Bitcoin(BasePlugin):
 			else:
 				print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(withdrawal_addy, ltb_addy))
 				withdrawal_addy = ltb_addy
-				isvalid = True
+				vret = kwargs['address_validator'](ltb_addy, coin)
+				
+				isvalid = vret['isvalid']
+				if not isvalid:
+					print('Address for user is not a valid address for {}'.format(coin.upper()))
+					withdrawal_addy = raw_input('\nTo which address or Let\'s Talk Bitcoin! user would you like to receive your {} to? '.format(coin.upper()))
+					vret = kwargs['address_validator'](withdrawal_addy, coin)
+					isvalid = vret['isvalid']
 				
 		return withdrawal_addy
 		
@@ -453,7 +460,7 @@ class Bitcoin(BasePlugin):
 			pass # wallet is unlocked
 		return True
 	
-	def try_lock_wallet(self, printerrors=False):
+	def try_lock_wallet(self, printsuccess=False, printerrors=False):
 		if not self.is_wallet_encrypted():
 			if printerrors:
 				self.output('Your wallet is not encrypted. It\'s been unlocked this entire time!')
@@ -463,6 +470,8 @@ class Bitcoin(BasePlugin):
 			self.access._call('walletlock')
 		except Exception as e:
 			print('lockwallet: {} ({})'.format(e, type(e)))
+		if printsuccess:
+			print('Successfully locked your wallet')
 		return True
 	
 	def sign_and_send(self, utx):

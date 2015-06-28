@@ -150,7 +150,7 @@ class Counterparty(BasePlugin):
 		if not assets:
 			print('You do not have any Counterparty assets that are currently supported by ShapeShift {}'.format(self.ACCEPTED_SHAPESHIFT_ASSETS))
 			return False
-		choice = self.prompt(assets, title='Which asset do you want to ShapeShift?', choicemsg='(number)-> ')
+		choice = self.prompt(assets, title='Which asset do you want to ShapeShift?', choicemsg='Which asset? ')
 		self.coin_name = assets[choice]
 		return True
 	
