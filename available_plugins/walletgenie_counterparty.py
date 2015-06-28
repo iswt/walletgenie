@@ -22,7 +22,7 @@ FREEASSET_MAX = 256**8
 class Counterparty(BasePlugin):
 	
 	coin_name = 'XCP' # shapeshift plugin -- default value
-	ACCEPTED_SHAPESHIFT_ASSETS = ['STORJ', 'GEMZ', 'SWARM', 'XCP']
+	ACCEPTED_SHAPESHIFT_ASSETS = ['SJCX', 'GEMZ', 'SWARM', 'XCP']
 	
 	def __init__(self, *args, **kwargs):
 		
@@ -238,7 +238,7 @@ class Counterparty(BasePlugin):
 			}
 		}
 		
-		assets = [ ['Asset', 'Balance', 'Divisible', 'Locked'], ['BTC', self.formatted(btcbal), 'Yes', 'Yes'] ]
+		assets = [ ['Asset', 'Balance', 'Divisible', 'Locked'], ['BTC', self.formatted(btcbal), 'Yes', 'N/A'] ]
 		
 		resp = self.make_request(payload)['result']
 		

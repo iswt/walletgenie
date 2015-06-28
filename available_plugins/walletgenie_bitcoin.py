@@ -353,7 +353,7 @@ class Bitcoin(BasePlugin):
 		
 		if not self.confirm_prompt('Are you sure you want to change your magic phrase? '):
 			print('abort')
-			return none
+			return None
 		
 		tx = self.access.walletpassphrasechange(old_passphrase, new_passphrase)
 		self.output('Successfully changed password: {}'.format(tx))
