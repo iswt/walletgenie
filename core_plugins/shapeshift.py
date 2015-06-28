@@ -215,7 +215,7 @@ class Shapeshift(BasePlugin):
 		howmuch = None
 		while howmuch is None:
 			howmuch = raw_input('\nHow many would you like to shift -- you can shift up to {} (\'m\' to use max)? '.format(amnt)).strip()
-			if howmuch == '':
+			if howmuch == 'm':
 				howmuch = amnt
 			try:
 				assert float(howmuch) <= float(amnt)
@@ -362,10 +362,15 @@ class Shapeshift(BasePlugin):
 	
 	def get_rate(self, coinpair):
 		rated = self._call('get', 'rate', coinpair)
+		if not rated:
+			return None
 		return float(rated['rate'])
 	
 	def get_market_rates(self, coin):
 		allinfo = self._call('get', 'marketinfo')
+		if not allinfo:
+			return None
+		
 		outd = {}
 		for d in allinfo:
 			p1, p2 = d['pair'].split('_')
