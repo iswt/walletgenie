@@ -162,7 +162,7 @@ class Bitcoin(BasePlugin):
 		outs += '\nUsing my awesome powers, I am now speaking to bitcoind v{}, which is connected to {} other nodes around the world.\n\nThe last block I have seen on the blockchain is {}.\n'.format(btci['version'], btci['connections'], btci['blocks'])
 		try:
 			if btci['unlocked_until'] == 0:
-				outs += '\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.\n'
+				outs += '\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.'
 			else:
 				timeremaining = int(btci['unlocked_until']) - int(time.time())
 				outs += '\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds, at which time it will fade from my memory.'.format(timeremaining)

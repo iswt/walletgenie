@@ -1,5 +1,9 @@
 import os
 import sys
+WINDOWS = False
+if sys.platform == 'win32':
+	WINDOWS = True
+
 import glob
 try:
 	import ConfigParser
@@ -125,7 +129,11 @@ class WalletGenieConfigurationError(Exception):
 
 class WalletGenieConfig(WalletGenie):
 	
-	def __init__(self, config_dir='{}/'.format(USER_CONFIG_DIR)):
+	def __init__(self, config_dir=USER_CONFIG_DIR):
+		if WINDOWS:
+			config_dir += '\\'
+		else:
+			config_dir += '/'
 		self.config_dir = config_dir
 	
 	def read_coin_config(self, config_file, header='fakesec'):
@@ -140,15 +148,21 @@ class WalletGenieConfig(WalletGenie):
 		
 		return retd
 	
-	def check_and_load(self, config_file, config_dir='{}/'.format(USER_CONFIG_DIR), default_conf_loc=None, required_values=[], default_values={}, silent=True):
+	def check_and_load(self, config_file, config_dir=USER_CONFIG_DIR, default_conf_loc=None, required_values=[], default_values={}, silent=True):
+		if WINDOWS:
+			enddir_symbol = '\\'
+		else:
+			enddir_symbol = '/'
+		config_dir += enddir_symbol
+		
 		configs_full = self.checkForConfigs(config_dir)
-		configs = [ cf[cf.rfind('/') + 1 : ] for cf in configs_full ] #strip out the full path and just get conf file names
+		configs = [ cf[cf.rfind(enddir_symbol) + 1 : ] for cf in configs_full ] #strip out the full path and just get conf file names
 		if not configs:
 			if not silent:
 				print('No configuration files')
 			return None
 			
-		if config_file[ config_file.rfind('/') + 1 :  ] not in configs:
+		if config_file[ config_file.rfind(enddir_symbol) + 1 :  ] not in configs:
 			# config file not found
 			return None
 		else:
@@ -267,11 +281,21 @@ class WalletGenieConfig(WalletGenie):
 	
 	def checkForConfigs(self, config_dir):
 		configs = []
-		for f in glob.glob('{}*.conf'.format( '{}/'.format(config_dir) if config_dir[-1] != '/' else config_dir )):
+		if WINDOWS:
+			enddir_symbol = '\\'
+		else:
+			enddir_symbol = '/'
+		
+		for f in glob.glob('{}*.conf'.format( '{}{}'.format(config_dir, enddir_symbol) if config_dir[-1] != enddir_symbol else config_dir )):
 			configs.append(f)
 		return configs
 	
-	def setConfig(self, config_file, infod, config_dir='{}/'.format(USER_CONFIG_DIR)):
+	def setConfig(self, config_file, infod, config_dir=USER_CONFIG_DIR):
+		if WINDOWS:
+			config_dir += '\\'
+		else:
+			config_dir += '/'
+		
 		wgcp = WalletGenieConfigParser()
 		conffile = '{}{}'.format(config_dir, config_file)
 		

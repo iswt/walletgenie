@@ -146,7 +146,7 @@ class Shapeshift(BasePlugin):
 		choice = None
 		while choice is None:
 			try:
-				choice = int( raw_input('\n(number)-> ') )
+				choice = int( raw_input('\nWhich asset? ') )
 				if choice not in range(1, len(disp) + 1):
 					print('invalid choice')
 					choice = None
@@ -162,6 +162,9 @@ class Shapeshift(BasePlugin):
 		coinpair = '{}_{}'.format(self.coinA, self.coinB)
 		
 		rate = self.get_rate('{}_{}'.format(self.coinA.lower(), self.coinB.lower()))
+		if not rate:
+			return None
+		
 		print('\nThe current rate is: 1 {0} = {1} {2}\nThe miner fee will be {3} {2}'.format(
 			self.coinA.upper(), self.formatted(rate), self.coinB.upper(), allrates[self.coinB.upper()]['minerFee']
 		))
@@ -184,6 +187,14 @@ class Shapeshift(BasePlugin):
 			print('(using {} as a return address)'.format(ret_addy))
 		
 		depinfo = self.get_deposit_info(coinpair, withdrawal_addy, ret_addy)
+		
+		if not depinfo:
+			print('Error contacting the ShapeShift API Server')
+			return None
+		if 'error' in depinfo.keys():
+			print('Error contacting the ShapeShift API server: {}'.format(depinfo['error']))
+			return None
+		
 		deposit_address = depinfo['deposit']
 		print('Received deposit address: {}'.format(deposit_address))
 		
@@ -265,7 +276,7 @@ class Shapeshift(BasePlugin):
 		choice = None
 		while choice is None:
 			try:
-				choice = int( raw_input('\n(number)-> ') )
+				choice = int( raw_input('\nWhich asset? ') )
 				if choice not in range(1, len(disp) + 1):
 					print('invalid choice')
 					choice = None

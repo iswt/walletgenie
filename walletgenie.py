@@ -231,7 +231,7 @@ class WalletGenie():
 			'plugin_class': plug
 		}
 		
-		print('sucessfully loaded {}'.format(plugin))
+		print('Successfully loaded {}'.format(plugin))
 		self.update_plugins()
 	
 	def update_plugins(self):
