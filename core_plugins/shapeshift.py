@@ -187,6 +187,20 @@ class Shapeshift(BasePlugin):
 			ret_addy = self.coinA_newaddy_func()
 			print('(using {} as a return address)'.format(ret_addy))
 		
+		coinpair_limit = self.get_deposit_limit(coinpair)
+		limitmax, limitmin = coinpair_limit['limit'], coinpair_limit['min']
+		print('\nYou can shift up to: {} {}\nYou must shift at least: {} {}\n'.format(limitmax, self.coinA.upper(), limitmin, self.coinA.upper()))
+		
+		print('Checking balance...')
+		amnt = self.coinA_amount_func()
+		if float(amnt) < float(limitmin):
+			print('You do not have a sufficient balance to shift {} into {}\n'.format(self.coinA.upper(), self.coinB.upper()))
+			return None
+		print('You have: {} {} ({} {})\n'.format(
+			amnt, self.coinA.upper(),
+			float(amnt) * float(rate), self.coinB.upper()
+		))
+		
 		depinfo = self.get_deposit_info(coinpair, withdrawal_addy, ret_addy)
 		
 		if not depinfo:
@@ -198,20 +212,6 @@ class Shapeshift(BasePlugin):
 		
 		deposit_address = depinfo['deposit']
 		print('Received deposit address: {}'.format(deposit_address))
-		
-		coinpair_limit = self.get_deposit_limit(coinpair)
-		limitmax, limitmin = coinpair_limit['limit'], coinpair_limit['min']
-		print('\nYou can shift up to: {} {}\nYou must shift at least: {} {}\n'.format(limitmax, self.coinA.upper(), limitmin, self.coinA.upper()))
-		
-		print('Checking balance...')
-		amnt = self.coinA_amount_func()
-		if float(amnt) < float(limitmin):
-			print('You do not have a sufficient balance to shift {} into {}'.format(self.coinA.upper(), self.coinB.upper()))
-			return None
-		print('You have: {} {} ({} {})\n'.format(
-			amnt, self.coinA.upper(),
-			float(amnt) * float(rate), self.coinB.upper()
-		))
 		
 		howmuch = None
 		while howmuch is None:
