@@ -247,7 +247,18 @@ class WalletGenie():
 		if not self.unloaded_plugins:
 			return False
 			
-		for p in self.unloaded_plugins:
+		plugins_to_load = []
+		if len(self.unloaded_plugins) > 1:
+			disp = self.unloaded_plugins + ['Enable them all!']
+			choice = self.prompt(self.unloaded_plugins, title='which plugin would you like to enable?', choicemsg='Which plugin? ')
+			if choice == len(disp) - 1:
+				plugins_to_load = self.unloaded_plugins
+			else:
+				plugins_to_load = [self.unloaded_plugins[choice]]
+		else:
+			plugins_to_load = [self.unloaded_plugins[0]]
+		
+		for p in plugins_to_load:
 			src = '{}/{}.py'.format(
 				os.path.relpath(AVAILABLE_PLUGINS_DIR, PLUGINS_DIR),
 				p
@@ -256,10 +267,10 @@ class WalletGenie():
 			os.symlink(src, dest)
 		
 		self.plugins = sorted(self.find_plugins(plugin_dir = PLUGINS_DIR))
-		for p in self.unloaded_plugins:
+		for p in plugins_to_load:
 			self.load_plugin(p, path='walletgenie_plugins', use_imp=False)
 		
-		self.unloaded_plugins = []
+		self.unloaded_plugins = [p for p in self.unloaded_plugins if p not in plugins_to_load]
 	
 	def switch_plugin(self, promptall=False, print_warnings=True):
 		if promptall:
