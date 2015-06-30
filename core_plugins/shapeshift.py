@@ -67,8 +67,8 @@ class Shapeshift(BasePlugin):
 			if int(response.status_code) != 200:
 				return None
 			output = json.loads( response.text )
-		except Exception as e:
-			print('\nError contacting ShapeShift servers...: {} ({})\n'.format(e, type(e)))
+		except Exception as e: # requests.exceptions.ConnectionError
+			print('\nError contacting ShapeShift servers...: {}\n'.format(e))
 			return None
 		
 		return output
@@ -100,6 +100,7 @@ class Shapeshift(BasePlugin):
 		menu = [
 			{'description': 'ShapeShift', 'callback': self.shapeshift},
 			{'description': 'ShapeShift (fixed amount)', 'callback': self.shapeshift_fixed},
+			{'description': 'Cancel a pending transaction (must not have already sent funds)', 'callback': self._prompt_cancel_transaction},
 			{'description': 'Check deposit status', 'callback': self._prompt_get_deposit_status},
 			{'description': 'Request email receipt', 'callback': self._prompt_send_email_receipt},
 			{'description': 'Stop ShapeShifting', 'callback': self.cleanup}
@@ -448,6 +449,41 @@ class Shapeshift(BasePlugin):
 			self.output('ShapeShift API Error: {}'.format(receipt['error']))
 		else:
 			self.output('Status: {}\nMessage: {}'.format(receipt['email']['status'], receipt['email']['message']))
+	
+	def cancel_pending_transaction(self, address):
+		return self._call('post', 'cancelpending', address=address)
+	
+	def _prompt_cancel_transaction(self):
+		address = None
+		if len(self.history) > 0:
+			hist_addresses = []
+			for depaddy, infod in self.history.iteritems():
+				if 'outgoing_tx' not in infod.keys(): # you cannot cancel an order that has already had funds sent to it
+					hist_addresses.append(infod['deposit'])
+			if len(hist_addresses) > 0:
+				disp = hist_addresses + ['Enter address manually']
+				choice = self.prompt(disp, title='Deposit address of transaction to cancel', choicemsg='Which address? ')
+				if choice == len(disp) - 1:
+					address = raw_input('enter address to cancel: ').strip()
+				else:
+					address = hist_addresses[choice]
+		if not address:
+			address = raw_input('enter deposit address to cancel transaction: ').strip()
+		
+		if not self.confirm_prompt('Really cancel the ShapeShift transaction associated with `{}`?'.format(address)):
+			print('aborted...')
+			return None
+		
+		ret = self.cancel_pending_transaction(address)
+		if not ret:
+			return None
+			
+		if 'error' in ret.keys():
+			self.output('ShapeShift API Error: {}'.format(ret['error']))
+			return False
+		elif 'success' in ret.keys():
+			self.output('Success: {}'.format(ret['success']))
+			return True
 	
 	def get_supported_coins(self):
 		return self._call('get', 'getcoins')
