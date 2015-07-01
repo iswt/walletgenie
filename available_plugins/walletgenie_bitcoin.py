@@ -9,6 +9,11 @@ try:
 except ImportError:
 	print('Unable to import bitcoinlib -- install it with: `pip install python-bitcoinlib`')
 	sys.exit(0)
+import json
+try:
+	import requests
+except ImportError:
+	print('Unable to import requests module. You will be unable to send to Let\'s Talk Bitcoin! or netki domains. If you want to utilize this functionality, install requests with: `pip install requests`')
 
 class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 	'''
@@ -203,31 +208,51 @@ class Bitcoin(BasePlugin):
 				isvalid = vret['isvalid']
 			return withdrawal_addy
 		
-		withdrawal_addy = raw_input('To which address or Let\'s Talk Bitcoin! user would you like to receive your {} to? '.format(coin.upper()))
-		vret = kwargs['address_validator'](withdrawal_addy, coin)
+		withdrawal_msg = 'To which address, netki domain or Let\'s Talk Bitcoin! user would you like to receive your {} to? '.format(coin.upper())
 		
+		withdrawal_addy = raw_input(withdrawal_msg)
+		vret = kwargs['address_validator'](withdrawal_addy, coin)
 		isvalid = vret['isvalid']
 		while not isvalid:
-			print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(withdrawal_addy))
+			netki_addy = None
+			if '.' in withdrawal_addy:
+				print('Checking netki for a wallet by the name of {}'.format(withdrawal_addy))
+				netki_addy = self.get_address_by_netki_wallet(withdrawal_addy, self.coin_name.lower(), printerrors=False)
+				if netki_addy:
+					vret = kwargs['address_validator'](netki_addy, coin)
+					isvalid = vret['isvalid']
+					if not isvalid:
+						print('Address returned for {} ({}) is not a valid address for {}\n'.format(withdrawal_addy, netki_addy, coin.upper()))
+						withdrawal_addy = raw_input(withdrawal_msg)
+						vret = kwargs['address_validator'](withdrawal_addy, coin)
+						isvalid = vret['isvalid']
+					else:
+						print('The Bitcoin address that belongs to {} is {}. Setting that as the destination address.'.format(withdrawal_addy, netki_addy))
+						if coin.upper() != 'BTC':
+							print('\nImportant note: netki does not officially support Counterparty. {} has set his/her *Bitcoin* address to be {} -- there is no guarantee the user has this address in a Counterparty compatible wallet.\n'.format(withdrawal_addy, netki_addy))
+						withdrawal_addy = netki_addy
 			
-			ltb_addy = self.get_address_by_ltb_user(withdrawal_addy)
-			if not ltb_addy:
-				print('Unable to locate any user by the name of {} at Let\'s Talk Bitcoin!'.format(withdrawal_addy))
+			if not netki_addy:
+				print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(withdrawal_addy))
 				
-				withdrawal_addy = raw_input('\nTo which address or Let\'s Talk Bitcoin! user would you like to receive your {} to? '.format(coin.upper()))
-				vret = kwargs['address_validator'](withdrawal_addy, coin)
-				isvalid = vret['isvalid']
-			else:
-				print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(withdrawal_addy, ltb_addy))
-				withdrawal_addy = ltb_addy
-				vret = kwargs['address_validator'](ltb_addy, coin)
-				
-				isvalid = vret['isvalid']
-				if not isvalid:
-					print('Address for user is not a valid address for {}'.format(coin.upper()))
+				ltb_addy = self.get_address_by_ltb_user(withdrawal_addy)
+				if not ltb_addy:
+					print('Unable to locate any user by the name of {} at Let\'s Talk Bitcoin!'.format(withdrawal_addy))
+					
 					withdrawal_addy = raw_input('\nTo which address or Let\'s Talk Bitcoin! user would you like to receive your {} to? '.format(coin.upper()))
 					vret = kwargs['address_validator'](withdrawal_addy, coin)
 					isvalid = vret['isvalid']
+				else:
+					print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(withdrawal_addy, ltb_addy))
+					withdrawal_addy = ltb_addy
+					vret = kwargs['address_validator'](ltb_addy, coin)
+					
+					isvalid = vret['isvalid']
+					if not isvalid:
+						print('Address for user is not a valid address for {}\n'.format(coin.upper()))
+						withdrawal_addy = raw_input(withdrawal_msg)
+						vret = kwargs['address_validator'](withdrawal_addy, coin)
+						isvalid = vret['isvalid']
 				
 		return withdrawal_addy
 		
@@ -255,21 +280,30 @@ class Bitcoin(BasePlugin):
 		return tx
 	
 	def _prompt_send_btc(self):
-		toaddy = raw_input('To which address or Let\'s Talk Bitcoin! user would you like me to send BTC? ').strip()
+		toaddy = raw_input('To which address, netki domain or Let\'s Talk Bitcoin! user would you like me to send BTC? ').strip()
 		validaddy = self.access.validateaddress(toaddy)
 		if not validaddy['isvalid']:
-			print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(toaddy))
-			ltb_addy = self.get_address_by_ltb_user(toaddy)
-			if not ltb_addy:
-				print('Unable to locate any user by the name of {} at Let\'s Talk Bitcoin!'.format(toaddy))
-				return None
-			else:
-				print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(toaddy, ltb_addy))
-				toaddy = ltb_addy
+			netki_addy = None
+			if '.' in toaddy:
+				print('Checking netki for a wallet by the name of {}'.format(toaddy))
+				netki_addy = self.get_address_by_netki_wallet(toaddy, self.coin_name.lower(), printerrors=False)
+				if netki_addy:
+					print('The Bitcoin address that belongs to {} is {}. Setting that as the destination address.'.format(toaddy, netki_addy))
+					toaddy = netki_addy
+			
+			if not netki_addy:
+				print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(toaddy))
+				ltb_addy = self.get_address_by_ltb_user(toaddy)
+				if not ltb_addy:
+					print('Unable to locate any user by the name of {} at Let\'s Talk Bitcoin!'.format(toaddy))
+					return None
+				else:
+					print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(toaddy, ltb_addy))
+					toaddy = ltb_addy
 		
 		btc_amnt = self.access.getbalance()
 		
-		amount = raw_input('How many BTC do you wish me to send to {} (you have {} BTC available)?\n'.format(
+		amount = raw_input('How many BTC do you wish me to send to {} (you have {} BTC available)? '.format(
 			toaddy, self.from_satoshis(btc_amnt)
 		)).strip()
 		
@@ -497,14 +531,12 @@ class Bitcoin(BasePlugin):
 		return tx
 	
 	def get_address_by_ltb_user(self, user):
+		url = 'https://letstalkbitcoin.com/api/v1/users?search={}'.format(user)
 		try:
-			import requests
-			import json
-		except ImportError:
+			resp = requests.get(url)
+		except NameError: # requests not imported
 			return None
 		
-		url = 'https://letstalkbitcoin.com/api/v1/users?search={}'.format(user)
-		resp = requests.get(url)
 		if int(resp.status_code) != 200:
 			return None
 		try:
@@ -519,3 +551,39 @@ class Bitcoin(BasePlugin):
 		except Exception as e:
 			return None
 		
+	def get_address_by_netki_wallet(self, wallet, coin, printerrors=True):
+		url = 'https://netki.com/api/wallet_lookup/'
+		headers = {
+			'Host': 'netki.com', 'User-Agent': 'WalletGenie netki integration',
+			'Content-type': 'application/json'
+		}
+		try:
+			try:
+				response = requests.get('{}{}/{}'.format(url, wallet, coin.lower()), headers=headers)
+			except NameError:# requests not imported
+				if printerrors:
+					print('requests is not imported, cannot lookup netki domain information.')
+				return None
+				
+			if int(response.status_code) not in [200, 404, 500]:
+				return None
+			
+			output = json.loads( response.text )
+		except ValueError: # json error (trying to load html)
+			if printerrors:
+				print('netki API error')
+			return None
+		except Exception as e: # requests.exceptions.ConnectionError
+			if printerrors:
+				print('\nError contacting netki servers...: {} ({})\n'.format(e, type(e)))
+			return None
+		
+		if 'success' in output.keys():
+			if not output['success']:
+				if printerrors:
+					print('netki api error: {}'.format(output['message']))
+				return None
+			else:
+				return output['wallet_address']
+		else:
+			return None

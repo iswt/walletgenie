@@ -329,6 +329,10 @@ class Counterparty(BasePlugin):
 	def _prompt_send_asset(self):
 		assets_l = self.get_balances(self.btc.selected_address, 0.0, pretty=False)[2 : ] # note: we really need a get_balances which doesnt take in the bitcoin balance as well...
 		assets = [a[0] for a in assets_l]
+		if not assets:
+			self.output('The current active address does not contain any assets to send!')
+			return None
+		
 		choice = self.prompt(assets, title='\n', choicemsg='\nWhich asset would you like me to send? ')
 		asset = assets[choice]
 		
@@ -354,17 +358,27 @@ class Counterparty(BasePlugin):
 				print('Exception: {} ({})'.format(e, type(e)))
 				amount = None
 		
-		toaddress = raw_input('To which address or Let\'s Talk Bitcoin! user would you like me to send {}? '.format(asset))
+		toaddress = raw_input('To which address, netki domain or Let\'s Talk Bitcoin! user would you like me to send {}? '.format(asset))
 		validaddy = self.btc.access.validateaddress(toaddress)
 		if not validaddy['isvalid']:
-			print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(toaddress))
-			ltb_addy = self.btc.get_address_by_ltb_user(toaddress)
-			if not ltb_addy:
-				print('Unable to locate any user by the name of {} at Let\'s Talk Bitcoin!'.format(toaddress))
-				return None
-			else:
-				print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(toaddress, ltb_addy))
-				toaddress = ltb_addy
+			netki_addy = None
+			if '.' in toaddress:
+				print('Checking netki for a wallet by the name of {}...'.format(toaddress))
+				netki_addy = self.btc.get_address_by_netki_wallet(toaddress, 'btc', printerrors=False)
+				if netki_addy:
+					print('The Bitcoin address that belongs to {} is {}. Setting that as the destination address.'.format(toaddress, netki_addy))
+					print('\nImportant note: netki does not officially support Counterparty. {} has set his/her *Bitcoin* address to be {} -- there is no guarantee the user has this address in a Counterparty compatible wallet.\n'.format(toaddress, netki_addy))
+					toaddress = netki_addy
+			
+			if not netki_addy:
+				print('Checking Let\'s Talk Bitcoin! for a user by the name of {}...'.format(toaddress))
+				ltb_addy = self.btc.get_address_by_ltb_user(toaddress)
+				if not ltb_addy:
+					print('Unable to locate any user by the name of {} at Let\'s Talk Bitcoin!'.format(toaddress))
+					return None
+				else:
+					print('The verified LTB address for {} is {}. Setting that as the destination address.'.format(toaddress, ltb_addy))
+					toaddress = ltb_addy
 		
 		return self.send_asset(asset, amount, toaddress)
 	

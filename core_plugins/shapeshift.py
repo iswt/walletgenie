@@ -180,7 +180,7 @@ class Shapeshift(BasePlugin):
 				withdrawal_addy = raw_input('\nWhat address would you like to receive your {} to? '.format(self.coinB.upper()))
 				vret = self.is_address_valid(withdrawal_addy, self.coinB)
 			
-		ret_addy = raw_input('Return address in case of problems (enter \'n\' generate a new one or leave blank for none [not recommended])?')
+		ret_addy = raw_input('Return address in case of problems (enter \'n\' generate a new one or leave blank for none [not recommended])? ')
 		if ret_addy == '':
 			ret_addy = None
 		elif ret_addy.lower() == 'n':
@@ -489,4 +489,13 @@ class Shapeshift(BasePlugin):
 		return self._call('get', 'getcoins')
 	
 	def is_address_valid(self, address, coinsymbol):
-		return self._call('get', 'validateAddress', address, coinsymbol.upper())
+		'''
+		shapeshift documentation states that the isvalid key will be present, and when an error is present there will be a message.
+		However, isvalid is not always returned. Sometimes only the error is returned
+		'''
+		ret = self._call('get', 'validateAddress', address, coinsymbol.upper())
+		if not ret:
+			return {'isvalid': False}
+		if 'isvalid' not in ret.keys(): # we should investigate into the cause of the error -- it could just be invalid because they're passing weird characters (netki/ltb usernames)
+			ret['isvalid'] = False
+		return ret
