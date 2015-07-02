@@ -367,8 +367,10 @@ class Counterparty(BasePlugin):
 				netki_addy = self.btc.get_address_by_netki_wallet(toaddress, 'btc', printerrors=False)
 				if netki_addy:
 					print('The Bitcoin address that belongs to {} is {}. Setting that as the destination address.'.format(toaddress, netki_addy))
-					print('\nImportant note: netki does not officially support Counterparty. {} has set his/her *Bitcoin* address to be {} -- there is no guarantee the user has this address in a Counterparty compatible wallet.\n'.format(toaddress, netki_addy))
+					print('\nImportant note: netki does not officially support Counterparty. This *Bitcoin* address is not guaranteed to be in a Counterparty compatible wallet.\n')
 					toaddress = netki_addy
+				else:
+					print('No netki user was found.')
 			
 			if not netki_addy:
 				print('Checking Let\'s Talk Bitcoin! for a user by the name of {}...'.format(toaddress))

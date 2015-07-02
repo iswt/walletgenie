@@ -117,12 +117,15 @@ class Bitcoin(BasePlugin):
 			)
 		)
 	
-	def choose_address(self):
-		active_addresses = self.get_wallet_addresses()
+	def choose_address(self, allow_empty=False):
+		active_addresses = self.get_wallet_addresses(allow_empty=allow_empty)
 		
 		disp = [x[0] for x in active_addresses]
+		if not disp:
+			return None
+		
 		active_address = self.prompt(
-			disp, title='\nLocal wallet (non-zero balance) addresses:\n', 
+			disp, title='\nLocal wallet {}addresses:\n'.format('(non-zero balance) ' if not allow_empty else ''), 
 			choicemsg='\nWhich wallet number should I use? '
 		)
 		
@@ -142,6 +145,14 @@ class Bitcoin(BasePlugin):
 			if not args[0].selected_address:
 				print('I can\'t do that until you choose an active address...\n')
 				args[0].choose_address()
+			return func(*args, **kwargs)
+		return validate_and_call
+	
+	def any_address_required(func):
+		def validate_and_call(*args, **kwargs):
+			if not args[0].selected_address:
+				print('I can\'t do that until you choose an active address...\n')
+				args[0].choose_address(allow_empty=True)
 			return func(*args, **kwargs)
 		return validate_and_call
 	
@@ -229,8 +240,10 @@ class Bitcoin(BasePlugin):
 					else:
 						print('The Bitcoin address that belongs to {} is {}. Setting that as the destination address.'.format(withdrawal_addy, netki_addy))
 						if coin.upper() != 'BTC':
-							print('\nImportant note: netki does not officially support Counterparty. {} has set his/her *Bitcoin* address to be {} -- there is no guarantee the user has this address in a Counterparty compatible wallet.\n'.format(withdrawal_addy, netki_addy))
+							print('\nImportant note: netki does not officially support Counterparty. This *Bitcoin* address is not guaranteed to be in a Counterparty compatible wallet.\n')
 						withdrawal_addy = netki_addy
+				else:
+					print('No netki user was found.')
 			
 			if not netki_addy:
 				print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(withdrawal_addy))
@@ -290,6 +303,8 @@ class Bitcoin(BasePlugin):
 				if netki_addy:
 					print('The Bitcoin address that belongs to {} is {}. Setting that as the destination address.'.format(toaddy, netki_addy))
 					toaddy = netki_addy
+				else:
+					print('No netki user was found.')
 			
 			if not netki_addy:
 				print('Checking Let\'s Talk Bitcoin! for a user by the name of {}'.format(toaddy))
@@ -319,7 +334,7 @@ class Bitcoin(BasePlugin):
 		tx = self.access._call('sendrawtransaction', stx)
 		return tx
 	
-	@address_required
+	@any_address_required
 	def sign_message(self):
 		message = raw_input('Please provide me with the message you would like to sign.\nMessage: ')
 		
@@ -414,7 +429,27 @@ class Bitcoin(BasePlugin):
 				else:
 					if float(balance) > 0:
 						active.append( (addy, balance) )
+		
+		just_addresses = [x[0] for x in active]
+		
+		addys_by_acc = self.get_wallet_addresses_a()
+		for aa in addys_by_acc:
+			if aa not in just_addresses and allow_empty:
+				active.append( (aa, 0.0) )
+				
 		return active # returns a list of tuples [(address, btc balance), ...]
+	
+	def get_wallet_addresses_a(self):
+		existing_accounts = self.access._call('listaccounts')
+		accs = [ x[0] for x in existing_accounts.iteritems() ]
+		
+		wallet_addresses = []
+		for a in accs:
+			l = self.access._call('getaddressesbyaccount', a)
+			for x in l:
+				wallet_addresses.append(x)
+		
+		return wallet_addresses
 	
 	def encrypt_wallet(self):
 		if self.is_wallet_encrypted():
