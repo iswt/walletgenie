@@ -27,10 +27,11 @@ else:
 	print('No home directory found in environment variables')
 	sys.exit(0)
 
+filedir = os.path.dirname(os.path.realpath(__file__))
 USER_CONFIG_DIR = os.path.join(USER_DIR, 'config')
-AVAILABLE_PLUGINS_DIR = os.path.join(os.path.dirname(__file__), 'available_plugins')
-PLUGINS_DIR = os.path.join(os.path.dirname(__file__), 'walletgenie_plugins')
-CORE_PLUGINS_DIR = os.path.join(os.path.dirname(__file__), 'core_plugins')
+AVAILABLE_PLUGINS_DIR = os.path.join(filedir, 'available_plugins')
+PLUGINS_DIR = os.path.join(filedir, 'walletgenie_plugins')
+CORE_PLUGINS_DIR = os.path.join(filedir, 'core_plugins')
 
 import time
 import datetime
