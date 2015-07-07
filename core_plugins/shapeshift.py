@@ -176,7 +176,7 @@ class Shapeshift(BasePlugin):
 			withdrawal_addy = raw_input('What address would you like to receive your {} to? '.format(self.coinB.upper()))
 			vret = self.is_address_valid(withdrawal_addy, self.coinB)
 			while not vret['isvalid']:
-				print 'Address is not valid for {}'.format(self.coinB)
+				print('Address is not valid for {}'.format(self.coinB))
 				withdrawal_addy = raw_input('\nWhat address would you like to receive your {} to? '.format(self.coinB.upper()))
 				vret = self.is_address_valid(withdrawal_addy, self.coinB)
 			
@@ -242,7 +242,11 @@ class Shapeshift(BasePlugin):
 			return None
 		else:
 			tx = self.coinA_send_func(deposit_address, howmuch)
-			self.output('Sent {} {}: {}'.format(howmuch, self.coinA.upper(), tx))
+			if not tx:
+				self.output('There was an error sending your coins to be ShapeShifted')
+			else:	
+				self.output('Sent {} {}: {}'.format(howmuch, self.coinA.upper(), tx))
+			
 			self.history[deposit_address] = {
 				'deposit': deposit_address, 'withdrawal': withdrawal_addy, 'howmuch': howmuch, 
 				'coina': self.coinA, 'coinb': self.coinB, 'coin_pair': coinpair,
@@ -294,6 +298,14 @@ class Shapeshift(BasePlugin):
 		coinpair = '{}_{}'.format(self.coinA, self.coinB)
 		
 		amnt = raw_input('How many {} would you like? '.format(self.coinB.upper())).strip()
+		validamnt = False
+		while not validamnt:
+			try:
+				assert float(validamnt) > 0
+				validamnt = True
+			except (ValueError, AssertionError) as e:
+				print('Invalid amount\n')
+				amnt = raw_input('How many {} would you like? '.format(self.coinB.upper())).strip()
 		
 		if self.coinA_withdrawal_address_func:
 			withdrawal_addy = self.coinA_withdrawal_address_func(self.coinB, address_validator=self.is_address_valid)
@@ -301,7 +313,7 @@ class Shapeshift(BasePlugin):
 			withdrawal_addy = raw_input('What address would you like to receive your {} to? '.format(self.coinB.upper()))
 			vret = self.is_address_valid(withdrawal_addy, self.coinB)
 			while not vret['isvalid']:
-				print 'Address is not valid for {}'.format(self.coinB)
+				print('Address is not valid for {}'.format(self.coinB))
 				withdrawal_addy = raw_input('\nWhat address would you like to receive your {} to? '.format(self.coinB.upper()))
 				vret = self.is_address_valid(withdrawal_addy, self.coinB)
 		
@@ -342,7 +354,11 @@ class Shapeshift(BasePlugin):
 			return None
 		else:
 			tx = self.coinA_send_func(deposit_address, howmuch)
-			self.output('Sent {} {}: {}'.format(howmuch, self.coinA.upper(), tx))
+			if tx:
+				self.output('Sent {} {}: {}'.format(howmuch, self.coinA.upper(), tx))
+			else:
+				self.output('There was an error sending your coins to be ShapeShifted')
+			
 			self.history[deposit_address] = {
 				'deposit': deposit_address, 'withdrawal': withdrawal_addy, 'howmuch': howmuch, 
 				'coina': self.coinA, 'coinb': self.coinB, 'coin_pair': coinpair,
