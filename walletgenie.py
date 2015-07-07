@@ -130,7 +130,7 @@ class WalletGenie():
 			try:
 				return imp.load_source(plugin, '{}/{}.py'.format(path, plugin))
 			except IOError as e:
-				print('\Enrror opening {}/{}: {}\n'.format(path, plugin, e))
+				print('\nError opening {}/{}: {}\n'.format(path, plugin, e))
 				sys.exit(0)
 	
 	def find_plugins(self, plugin_dir=PLUGINS_DIR):

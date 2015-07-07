@@ -1,5 +1,6 @@
 import os
 import sys
+
 WINDOWS = False
 if sys.platform == 'win32':
 	WINDOWS = True
@@ -13,6 +14,10 @@ except ImportError:
 	except ImportError:
 		print('Unable to import ConfigParser, install it with: `pip install ConfigParser`')
 		sys.exit(0)
+
+from getpass import getpass
+import time
+import json
 
 from walletgenie import WalletGenie, prompt
 from walletgenie import USER_CONFIG_DIR, PLUGINS_DIR, AVAILABLE_PLUGINS_DIR
@@ -84,6 +89,465 @@ class BasePlugin(object):
 			return False
 		return True
 	
+class WalletGenieImportError(Exception):
+	def __init__(self, message):
+		super(WalletGenieImportError, self).__init__(message)
+
+class BasePluginCoin(BasePlugin):
+	'''
+	implements functions from python-bitcoinrpc with the intention of being useful in coins that have the same/similar rpc calls
+	'''
+	def __init__(self, access_string, *args, **kwargs):
+		super(BasePluginCoin, self).__init__(*args, **kwargs)
+		try:
+			import bitcoinrpc
+		except ImportError:
+			print('Unable to import bitcoinrpc, install it with: `pip install python-bitcoinrpc`')
+			raise WalletGenieImportError('python-bitcoinrpc')
+		
+		class AuthServiceProxyWithErrorDisplay(bitcoinrpc.authproxy.AuthServiceProxy):
+			def __call__(self, *args):
+				try:
+					return super(AuthServiceProxyWithErrorDisplay, self).__call__(*args)
+				except bitcoinrpc.authproxy.JSONRPCException as e:
+					if 'message' not in e.error.keys() and 'id' not in e.error.keys():
+						msg = '{}'.format(e.error)
+					else:
+						msg = '{}'.format(e.error['message'])
+					border = '*' * len(msg)
+					print('\n{0}\n\nError: {1}\n\n{0}'.format(border, msg))
+					return None
+		
+		bitcoinrpc.authproxy.AuthServiceProxy = AuthServiceProxyWithErrorDisplay
+		self.access = bitcoinrpc.authproxy.AuthServiceProxy(access_string)
+		self.RPCException = bitcoinrpc.authproxy.JSONRPCException
+	
+	def shapeshift_withdrawal(self, coin, **kwargs):
+		_netki = False
+		withdrawal_msg = 'To which address would you like to receive your {} to? '.format(coin.upper())
+		if coin.upper() in ['BTC', 'LTC', 'DOGE', 'NMC', 'USDT']:
+			_netki = True
+			withdrawal_msg = 'To which address or netki domain would you like to receive your {} to? '.format(coin.upper())
+		
+		
+		withdrawal_addy = raw_input(withdrawal_msg)
+		vret = kwargs['address_validator'](withdrawal_addy, coin)
+		isvalid = vret['isvalid']
+		while not isvalid:
+			netki_addy = None
+			if _netki and '.' in withdrawal_addy:
+				print('Checking netki for a wallet by the name of {}'.format(withdrawal_addy))
+				netki_addy = self.get_address_by_netki_wallet(withdrawal_addy, self.coin_name.lower(), printerrors=False)
+				if netki_addy:
+					vret = kwargs['address_validator'](netki_addy, coin)
+					isvalid = vret['isvalid']
+					if not isvalid:
+						print('Address returned for {} ({}) is not a valid address for {}.\n'.format(withdrawal_addy, netki_addy, coin.upper()))
+						withdrawal_addy = raw_input(withdrawal_msg)
+						vret = kwargs['address_validator'](withdrawal_addy, coin)
+						isvalid = vret['isvalid']
+					else:
+						print('The address that belongs to {} is {}. Setting that as the destination address.'.format(withdrawal_addy, netki_addy))
+						withdrawal_addy = netki_addy
+				else:
+					print('No netki user was found.\n')
+			else:
+				print('Invalid address.\n')
+				
+			if not netki_addy:
+				withdrawal_addy = raw_input(withdrawal_msg)
+				vret = kwargs['address_validator'](withdrawal_addy, coin)
+				isvalid = vret['isvalid']
+				
+		return withdrawal_addy
+	
+	def choose_address(self, allow_empty=False):
+		active_addresses = self.get_wallet_addresses(allow_empty=allow_empty)
+		
+		disp = [x[0] for x in active_addresses]
+		if not disp:
+			return None
+		
+		active_address = self.prompt(
+			disp, title='\nLocal wallet {}addresses:\n'.format('(non-zero balance) ' if not allow_empty else ''), 
+			choicemsg='\nWhich wallet number should I use? '
+		)
+		
+		self.output('Address {} selected and active'.format(active_addresses[active_address][0]))
+		
+		retaddy, retbal = active_addresses[active_address][0], active_addresses[active_address][1]
+		
+		return retaddy
+	
+	
+	def _print_diagnostics(self, coin):
+		outs = 'I am attempting to speak to the {} network for you...\n'.format(coin)
+		xtci = self.access.getinfo()
+		outs += '\nUsing my awesome powers, I am now speaking to {}d v{}, which is connected to {} other nodes around the world.\n\nThe last block I have seen on the blockchain is {}.\n'.format(coin, xtci['version'], xtci['connections'], xtci['blocks'])
+		try:
+			if xtci['unlocked_until'] == 0:
+				outs += '\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.'
+			else:
+				timeremaining = int(xtci['unlocked_until']) - int(time.time())
+				outs += '\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds, at which time it will fade from my memory.'.format(timeremaining)
+			self.encrypted_wallet = True
+		except KeyError as e:
+			outs += "\nYour local wallet is not protected by a magic phrase. Your wish is my command."
+		
+		self.output(outs)
+	
+	def _prompt_get_balance(self, coin):
+		amnt = self.get_balance()
+		self.output('You have: {} {} in your coffers.'.format(self.formatted(amnt), coin))
+	
+	def get_balance(self):
+		return self.access.getbalance()
+	
+	def sendto(self, toaddress, amount):
+		self.try_unlock_wallet()
+		tx = self.access.sendtoaddress(toaddress, amount)
+		self.try_lock_wallet()
+		return tx
+	
+	def _prompt_send(self, coin):
+		promptmsg = 'To which address or netki domain would you like me to send {}? '.format(coin)
+		
+		toaddy = raw_input(promptmsg).strip()
+		validaddy = self.access.validateaddress(toaddy)
+		isvalid = validaddy['isvalid']
+		while not isvalid:
+			netki_addy = None
+			if '.' in toaddy:
+				print('Checking netki for a wallet by the name of {}'.format(toaddy))
+				netki_addy = self.get_address_by_netki_wallet(toaddy, coin.lower(), printerrors=False)
+				if netki_addy:
+					validaddy = self.access.validateaddress(netki_addy)
+					isvalid = validaddy['isvalid']
+					if not isvalid:
+						print('Address returned for {} ({}) is not a valid address for {}\n'.format(toaddy, netki_addy, coin.upper()))
+						toaddy = raw_input(promptmsg)
+						validaddy = self.access.validateaddress(toaddy)
+						isvalid = validaddy['isvalid']
+					else:
+						print('The address that belongs to {} is {}. Setting that as the destination address.'.format(toaddy, netki_addy))
+						toaddy = netki_addy
+				else:
+					print('No netki user was found.')
+			else:
+				print('Invalid address\n')
+			
+			if not netki_addy:
+				toaddy = raw_input(promptmsg)
+				validaddy = self.access.validateaddress(toaddy)
+				isvalid = validaddy['isvalid']
+		
+		coin_amnt = self.get_balance()
+		amount = raw_input('How many {0} do you wish me to send to {1} (you have {2} {0} available)? '.format(
+			coin, toaddy, self.formatted(coin_amnt)
+		)).strip()
+		
+		if not self.confirm_prompt('Do you really want to send {} {} to {}?'.format(self.formatted(amount), coin, toaddy)):
+			print('\naborted...')
+			return None
+		
+		tx = self.sendto(toaddy, float(amount))
+		if tx:
+			self.output('Sent tx: {}'.format(tx))
+		return tx
+	
+	def getnewaddress(self, label=''):
+		return self.access.getnewaddress(label)
+	
+	def _prompt_get_new_address(self, default_label=''):
+		label = raw_input('What label would you like to use? [blank for default]: ')
+		if label == '':
+			label = default_label
+		tx = self.getnewaddress(label)
+		self.output('Successfully created new address: {}'.format(tx))
+	
+	def sign_tx(self, utx):
+		stx = self.access.signrawtransaction(utx)
+		assert stx['complete']
+		
+		return stx['hex']
+	
+	def broadcast_tx(self, stx):
+		tx = self.access.sendrawtransaction(stx)
+		return tx
+	
+	def sign_message(self, addy, message):
+		self.try_unlock_wallet()
+		tx = self.access.signmessage(addy, message)
+		self.try_lock_wallet()
+		return tx
+	
+	def _prompt_sign_message(self):
+		addy = self.choose_address(allow_empty=True)
+		message = raw_input('Please provide me with the message you would like to sign.\nMessage: ')
+		tx = self.sign_message(addy, message)
+		self.output('Address: {}\nSigned: {}\nMessage: {}'.format(addy, tx, message))
+	
+	def verify_message(self, address, signature, message):
+		return self.access.verifymessage(address, signature, message)
+	
+	def _prompt_verify_message(self):
+		signature = raw_input('Please provide me with the (base64 encoded) signed message: ').strip() # strip extraneous spaces
+		message = raw_input('Please provide me with the unsigned, plaintext message: ')
+		address = raw_input('Please provide me with the address that claims to have signed the message: ').strip()
+		
+		signed = self.verify_message(address, signature, message)
+		if signed:
+			self.output('I can confirm the message was definitely signed by {}'.format(address))
+		else:
+			self.output('The message failed verification. (double check that your input was correct)')
+	
+	def is_wallet_encrypted(self):
+		try:
+			info = self.access.getinfo()
+			if 'unlocked_until' in info.keys():
+				return True
+			else:
+				return False
+		except self.RPCException as e:
+			self.output('[code {}] {}'.format(e.error['code'], e.error['message']))
+			return False
+	
+	def unlock_wallet(self, printsuccess=False, printerrors=False, modify_duration=False):
+		if not self.is_wallet_encrypted():
+			if printerrors:
+				self.output('Your wallet is not encrypted. It\'s been unlocked this entire time!')
+			return True
+			
+		try:
+			wallet_passphrase = None
+			duration = None
+			while wallet_passphrase is None:
+				wallet_passphrase = getpass('Please tell me your magic phrase. I promise not to tell anyone: ')
+			if modify_duration:
+				while duration is None:
+					duration = raw_input('How long shall I keep the wallet unlocked (seconds)? [default: 300]: ')
+					if duration == '':
+						duration = 300
+					else:
+						try:
+							assert int(duration)
+						except AssertionError:
+							print('Invalid duration')
+							duration = None
+			else:
+				duration = 120 # default to 2 minutes
+				
+			isvalid = self.access.walletpassphrase(wallet_passphrase, int(duration))
+			if isvalid == False: # isvalid == None is a valid response...
+				return False
+		except self.RPCException as e:
+			self.output('[code {}] {}'.format(e.error['code'], e.error['message']))
+			return False
+		
+		if printsuccess:
+			self.output('I have successfully unlocked your wallet for {} seconds.'.format(duration))
+		return True
+	
+	def try_lock_wallet(self, printsuccess=False, printerrors=False):
+		if not self.is_wallet_encrypted():
+			if printerrors:
+				self.output('Your wallet is not encrypted. It\'s been unlocked this entire time!')
+			return True
+		
+		try:
+			self.access.walletlock()
+		except Exception as e:
+			print('lockwallet: {} ({})'.format(e, type(e)))
+		if printsuccess:
+			print('Successfully locked your wallet')
+		return True
+	
+	def try_unlock_wallet(self, printsuccess=False, modify_duration=False, ask_until_correct=True):
+		'''
+		attempt to unlock the wallet
+		return true if the wallet is not encrypted, is currently unlocked, or the user successfully unlocks it
+		return false if the wallet is encrypted and the user fails to unlock
+		'''
+		try:
+			info = self.access.getinfo()
+			if info['unlocked_until'] == 0:
+				if not self.unlock_wallet(printsuccess=printsuccess, modify_duration=modify_duration):
+					if ask_until_correct:
+						correct = False
+						while not correct:
+							correct = self.unlock_wallet(printsuccess=printsuccess, modify_duration=modify_duration)
+					else:
+						return False
+		except KeyError:
+			pass # wallet is unlocked
+		return True
+	
+	def sign_and_send(self, utx):
+		self.try_unlock_wallet()
+		
+		stx = self.sign_tx(utx)
+		tx = self.broadcast_tx(stx)
+		
+		self.try_lock_wallet()
+		
+		return tx
+	
+	def get_wallet_addresses(self, allow_empty=False):
+		wallet_addresses = self.access.listaddressgroupings()
+		active = []
+		
+		for w in wallet_addresses:
+			for tup in w:
+				addy, balance = tup[0], tup[1]
+				if allow_empty:
+					active.append( (addy, balance) )
+				else:
+					if float(balance) > 0:
+						active.append( (addy, balance) )
+		
+		just_addresses = [x[0] for x in active]
+		
+		addys_by_acc = self.get_wallet_addresses_a()
+		for aa in addys_by_acc:
+			if aa not in just_addresses and allow_empty:
+				active.append( (aa, 0.0) )
+				
+		return active # returns a list of tuples [(address, btc balance), ...]
+	
+	def get_wallet_addresses_a(self):
+		existing_accounts = self.access.listaccounts()
+		accs = [ x[0] for x in existing_accounts.iteritems() ]
+		
+		wallet_addresses = []
+		for a in accs:
+			l = self.access.getaddressesbyaccount(a)
+			for x in l:
+				wallet_addresses.append(x)
+		return wallet_addresses
+	
+	def import_privkey(self):
+		if not self.confirm_prompt('This process will rescan your wallet, which is likely to take a long time. Are you sure that you want to continue? [y/N]: '):
+			print('\naborted...')
+			return None	
+			
+		privkey = raw_input('Please provide me with the private key you wish to import: ')
+		label = raw_input('Please provide me with an optional label for this account [blank for none]: ')
+		
+		self.try_unlock_wallet()
+		
+		tx = self.access.importprivkey(privkey, label)
+		self.output('I have successfully imported your private key: {}'.format(tx))
+		return tx
+	
+	def import_watch_address(self):
+		if not self.confirm_prompt('This process will rescan your wallet, which is likely to take a long time. Are you sure that you want to continue?\n'):
+			print('\naborted...')
+			return None
+		
+		addr = raw_input('Please provide me with the address you would like me to watch: ')
+		label = raw_input('Please provide me with an optional label for this account [blank for none]: ')
+		
+		rescan = True # I think that this is always true, regardless
+		
+		tx = self.access.importaddress(addr, label=label, rescan=rescan)
+		
+		self.output('I have imported the watch-only address {}: {}'.format(addr, tx))
+		return tx
+	
+	def change_passphrase(self, oldpw, newpw):
+		return self.access.walletpassphrasechange(oldpw, newpw)
+	
+	def _prompt_change_passphrase(self):
+		if not self.is_wallet_encrypted():
+			self.output('Your wallet is not encrypted, I can\'t change it\'s passphrase!')
+			return None
+			
+		old_passphrase = getpass('Please provide me with your current magic phrase: ')
+		confirmed = False
+		while not confirmed:
+			new_passphrase = getpass('Please provide me with your new magic phrase: ')
+			confirm_new_passphrase = getpass('Please confirm your new magic phrase: ')
+			if new_prassphrase != confirm_new_passphrase:
+				print('Your magic phrases do not match. Please try again.')
+			else:
+				confirmed = True
+		
+		if not self.confirm_prompt('Are you sure you want to change your magic phrase? '):
+			print('abort')
+			return None
+		
+		tx = self.change_passphrase(old_passphrase, new_passphrase)
+		self.output('Successfully changed password: {}'.format(tx))
+		return tx
+	
+	def encrypt_wallet(self, pw):
+		return self.access.encryptwallet(pw)
+	
+	def _prompt_encrypt_wallet(self):
+		if self.is_wallet_encrypted():
+			self.output('Your wallet is already encrypted')
+			return None
+		
+		confirmed = False
+		while not confirmed:
+			encrypt_passphrase = getpass('Please provide me with your magic phrase. I will use it to encrypt your wallet: ')
+			confirm_passphrase = getpass('Please confirm your magic phrase: ')
+			if encrypt_passphrase != confirm_passphrase:
+				print('\nThe magic phrases do not match.\n')
+			else:
+				confirmed = True
+		
+		if not self.confirm_prompt('Do you really want to encrypt the wallet with this magic phrase? '):
+			print('\naborted')
+			return None
+		
+		tx = self.encrypt_wallet(encrypt_passphrase)
+		self.output('I successfully encrypted your wallet: {}'.format(tx))
+		return tx
+	
+	def get_address_by_netki_wallet(self, wallet, coin, printerrors=True):
+		try:
+			import requests
+		except ImportError:
+			self.output('requests module not found, netki lookup disabled -- enable it by installing requests: `pip install requests`')
+			return None
+		
+		url = 'https://netki.com/api/wallet_lookup/'
+		headers = {
+			'Host': 'netki.com', 'User-Agent': 'WalletGenie netki integration',
+			'Content-type': 'application/json'
+		}
+		try:
+			try:
+				response = requests.get('{}{}/{}'.format(url, wallet, coin.lower()), headers=headers)
+			except NameError:# requests not imported
+				if printerrors:
+					print('requests is not imported, cannot lookup netki domain information.')
+				return None
+				
+			if int(response.status_code) not in [200, 404, 500]:
+				return None
+			
+			output = json.loads( response.text )
+		except ValueError: # json error (trying to load html)
+			if printerrors:
+				print('netki API error')
+			return None
+		except Exception as e: # requests.exceptions.ConnectionError
+			if printerrors:
+				print('\nError contacting netki servers...: {} ({})\n'.format(e, type(e)))
+			return None
+		
+		if 'success' in output.keys():
+			if not output['success']:
+				if printerrors:
+					print('netki api error: {}'.format(output['message']))
+				return None
+			else:
+				return output['wallet_address']
+		else:
+			return None
+
 class FakeSecHead(object):
 	def __init__(self, fp):
 		self.fp = fp
