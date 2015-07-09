@@ -290,7 +290,7 @@ class Counterparty(BasePlugin):
 				'pubkey': self.btc.selected_address_info['pubkey'],
 				'asset': asset,
 				'quantity': amount,
-				'encoding': 'auto'
+				'encoding': 'multisig'
 			}
 		}
 		utx = self.make_request(payload)['result']
@@ -306,7 +306,7 @@ class Counterparty(BasePlugin):
 				"pubkey": self.btc.selected_address_info['pubkey'],
 				"asset": asset,
 				"quantity": amount,
-				"encoding": "auto",
+				"encoding": "multisig",
 			},
 			"jsonrpc": "2.0",
 			"id": 0
@@ -508,7 +508,7 @@ class Counterparty(BasePlugin):
 				"timestamp": int(time.time()),
 				"value": value,
 				"pubkey": self.btc.selected_address_info['pubkey'],
-				"encoding": "auto",
+				"encoding": "multisig",
 			}
 		}
 		
