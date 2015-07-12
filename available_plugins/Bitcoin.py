@@ -1,6 +1,9 @@
 
+from wgplugins.WGPlugins import WGPlugin
 
-class Bitcoin(object):
+import npyscreen
+
+class Bitcoin(WGPlugin):
 	
-	def __init__(self):
-		pass
+	def __init__(self, *args, **kwargs):
+		super(Bitcoin, self).__init__(*args, **kwargs)
