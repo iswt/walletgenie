@@ -12,28 +12,13 @@ if 'HOME' in os.environ:
 	USER_DIR = os.path.join(USER_HOME, '.walletgenie')
 elif 'APPDATA' in os.environ or 'LOCALAPPDATA' in os.environ:
 	USER_DIR = os.path.join(os.environ['APPDATA'], 'Walletgenie')
-	# We're on windows, set the os.symlink appropriately
-	# see: http://stackoverflow.com/a/28382515
-	def symlink_ms(source, link_name):
-		import ctypes
-		csl = ctypes.windll.kernel32.CreateSymbolicLinkW
-		csl.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32)
-		csl.restype = ctypes.c_ubyte
-		flags = 1 if os.path.isdir(source) else 0
-		try:
-			if csl(link_name, source.replace('/', '\\'), flags) == 0:
-				raise ctypes.WinError()
-		except:
-			pass
-	os.symlink = symlink_ms
 else:
 	print('No home directory found in environment variables')
 	sys.exit(0)
 
 filedir = os.path.dirname(os.path.realpath(__file__))
 USER_CONFIG_DIR = os.path.join(USER_DIR, 'config')
-AVAILABLE_PLUGINS_DIR = os.path.join(filedir, 'available_plugins')
-PLUGINS_DIR = os.path.join(filedir, 'enabled_plugins')
+PLUGINS_DIR = os.path.join(filedir, 'available_plugins')
 CORE_PLUGINS_DIR = os.path.join(filedir, 'core_plugins')
 
 import pkgutil
@@ -41,6 +26,8 @@ import time
 import datetime
 import npyscreen
 import curses
+
+import imp
 
 class PluginPrompterForm(npyscreen.ActionFormV2):
 	OK_BUTTON_TEXT = 'OK'
@@ -105,22 +92,26 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		})
 	
 	def postInit(self):
+		fp, pathname, description = imp.find_module('available_plugins')
+		self._enabled_plugins = imp.load_module('walletgenie_plugins', fp, pathname, description)
+		self._import_plugin = lambda name: imp.load_source('walletgenie_plugins.{}'.format(name), os.path.join(PLUGINS_DIR, '{}.py'.format(name)))
+		
 		self.check_plugins()
 		
 		self.ppf = PluginPrompterForm()
 		self.ppf.select = self.ppf.add(
 			npyscreen.TitleMultiSelect, name='Select which plugins you would like to enable', 
-			values=self._available_plugins, value=[self._available_plugins.index(x) for x in self._plugins if x in self._available_plugins],
+			values=self._available_plugins, #value=[self._available_plugins.index(x) for x in self._available_plugins],
 			scroll_exit=True, width=1
 		)
 		self.parentApp.registerForm('PluginSelectForm', self.ppf)
 		
 		self.switch_plugin_form = PluginPrompterForm()
-		self.switch_plugin_form.select = self.switch_plugin_form.add(npyscreen.TitleSelectOne, name='Select a plugin', values=self._plugins, scroll_exit=True, width=1)
+		self.switch_plugin_form.select = self.switch_plugin_form.add(npyscreen.TitleSelectOne, name='Select a plugin', values=self._available_plugins, scroll_exit=True, width=1)
 		self.parentApp.registerForm('SwitchPluginForm', self.switch_plugin_form)
 		
 	def activate(self):
-		if not self.ppf.selected and not self._plugins:
+		if not self.ppf.selected and not self.loaded_plugins:
 			self.parentApp.switchForm('PluginSelectForm')
 		else:
 			if self.LASTFORM == 'PluginSelectForm': # coming from the enable/disable plugin form
@@ -129,40 +120,33 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 					chosen_plugins = []
 				
 				for p in chosen_plugins:# load these plugins, if they are not already loaded
-					if p not in self._plugins:#self.loaded_plugins.keys():
-						src = '{}/{}'.format(os.path.relpath(AVAILABLE_PLUGINS_DIR, PLUGINS_DIR), p)
-						dest = '{}/{}.py'.format(PLUGINS_DIR, p)
-						if not os.path.exists(dest):
-							os.symlink(src, dest)
-				for p in [x for x in self._available_plugins if x not in chosen_plugins]:# disable these plugins
-					if p in self._plugins:#self.loaded_plugins.keys():
-						unl = '{}/{}.py'.format(PLUGINS_DIR, p)
-						if os.path.islink(unl):
-							os.unlink(unl)
+					if p not in self.loaded_plugins.keys():#self._plugins:#self.loaded_plugins.keys():
+						#npyscreen.notify_confirm('Load {}'.format(p))
+						self.load_plugin(p)
+						
+				for p in [x for x in self._available_plugins if x not in chosen_plugins]:#set(self._available_plugins).intersection(chosen_plugins):#[x for x in self._available_plugins if x not in chosen_plugins]:# disable these plugins
+					if p in self.loaded_plugins.keys():#self._plugins:#self.loaded_plugins.keys():
+						#npyscreen.notify_confirm('Unload {}'.format(p))
+						self.unload_plugin(p)
 				
 				self.check_plugins()
-				self.ppf.select.value = [self._available_plugins.index(x) for x in self._plugins if x in self._available_plugins]
+				loaded_names = list(self.loaded_plugins.keys())
+				self.ppf.select.value = [self._available_plugins.index(x) for x in loaded_names if x in self._available_plugins]
 				
-				#npyscreen.notify_confirm('setting values to: {}'.format(self._plugins))
-				self.switch_plugin_form.select.values = self._plugins
+				self.switch_plugin_form.select.values = loaded_names
 				if self.active_plugin:
-					if self.active_plugin in self._plugins:
-						self.switch_plugin_form.select.value = self._plugins.index(self.active_plugin)
+					if self.active_plugin in loaded_names:
+						self.switch_plugin_form.select.value = loaded_names.index(self.active_plugin)
 					else:
 						self.active_plugin = None
-				#self.switch_plugin_form.display()
 			
 			if not self.active_plugin:
-				#npyscreen.notify_confirm('{}'.format(self.LASTFORM))
 				if self.LASTFORM == 'SwitchPluginForm':
 					if self.switch_plugin_form.selected:
 						self.check_plugins()
 						self.active_plugin = self.switch_plugin_form.selected[0]
-						#npyscreen.notify_confirm('{}'.format(self.switch_plugin_form.selected))
 						self.switch_plugin_form.select.value = self._plugins.index(self.active_plugin)
-						#self.switch_plugin_form.display()
 				else:
-					#npyscreen.notify_confirm('{}'.format('lastform is not switchpluginform, switching to that...'))
 					self.parentApp.switchForm('SwitchPluginForm')
 			else:
 				self.edit()
@@ -171,11 +155,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		self.LASTFORM = lastform
 	
 	def check_plugins(self):
-		self._available_plugins = self.find_plugins(plugin_dir=AVAILABLE_PLUGINS_DIR)
-		self._plugins = self.find_plugins()
-		if not self._plugins:
-			self.active_plugin = None
-		
+		self._available_plugins = self.find_plugins(plugin_dir=PLUGINS_DIR)
 	
 	def find_plugins(self, plugin_dir=PLUGINS_DIR, exclusions=['walletgenie_plugins']):
 		modules = pkgutil.iter_modules(path=[plugin_dir])
@@ -200,6 +180,54 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 	
 	def enable_plugin(self, unknown=None):
 		self.parentApp.switchForm('PluginSelectForm')
+	
+	def load_plugin(self, plugin):
+		loader = self.import_plugin(plugin)
+		if not loader:
+			return None
+		
+		# instantiate the new class
+		classname = self.get_plugin_class(plugin)
+		loaded_class = getattr(loader, classname)
+		try:
+			#plug = loaded_class(self.plugins, self.loaded_plugins, self.active_plugin, self.load_plugin)
+			plug = loaded_class()
+		except Exception as e:
+			npyscreen.notify_confirm('Error initiating {}: [{}] {}'.format(plugin, type(e), e))
+			return None
+			
+		self.active_plugin = plugin
+		self.loaded_plugins[plugin] = { 
+			'name': plugin, 
+			'loader': loader,
+			'plugin_class': plug
+		}
+		
+		npyscreen.notify_confirm('Successfully loaded {}'.format(plugin))
+		self.update_plugins()
+	
+	def unload_plugin(self, plugin):
+		if plugin not in self.loaded_plugins.keys():
+			return None
+		
+		# call the plugins close method
+		#self.loaded_plugins[plugin]['plugin_class'].
+		
+		del self.loaded_plugins[plugin]
+		if self.active_plugin == plugin:
+			self.active_plugin = None
+		
+		self.update_plugins()
+	
+	def import_plugin(self, plugin):
+		try:
+			return self._import_plugin(plugin)
+		except Exception as e:
+			npyscreen.notify_confirm('Error: {}'.format(e))
+			return None
+		
+	def update_plugins(self):
+		pass
 	
 	def exit_app(self, unknown=None):
 		self.editing = False
