@@ -301,7 +301,7 @@ class Shapeshift(BasePlugin):
 		validamnt = False
 		while not validamnt:
 			try:
-				assert float(validamnt) > 0
+				assert float(amnt) > 0
 				validamnt = True
 			except (ValueError, AssertionError) as e:
 				print('Invalid amount\n')
