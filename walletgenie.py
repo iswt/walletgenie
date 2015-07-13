@@ -120,6 +120,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		else:
 			if self.LASTFORM == 'PluginSelectForm': # coming from the enable/disable plugin form
 				chosen_plugins = self.ppf.selected
+				
 				if not chosen_plugins:
 					chosen_plugins = []
 				
@@ -151,7 +152,10 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 						self.active_plugin = self.switch_plugin_form.selected[0]
 						self.switch_plugin_form.select.value = sorted(self.loaded_plugins.keys()).index(self.active_plugin)
 				else:
-					self.parentApp.switchForm('SwitchPluginForm')
+					if self.switch_plugin_form.select.values:
+						self.parentApp.switchForm('SwitchPluginForm')
+					else:
+						self.parentApp.switchForm('PluginSelectForm')
 			else:
 				self.edit()
 	
@@ -196,8 +200,8 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		try:
 			plug = loaded_class(self.plugins, self.loaded_plugins, self.active_plugin, self.load_plugin)
 			#plug = loaded_class()
-		except Exception as e:
-			npyscreen.notify_confirm('Error initiating {}: [{}] {}'.format(plugin, type(e), e))
+		except IOError as e:
+			npyscreen.notify_confirm('Error initiating {}: {}'.format(plugin, e))
 			return None
 			
 		self.active_plugin = plugin
@@ -226,7 +230,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		try:
 			return self._import_plugin(plugin)
 		except Exception as e:
-			npyscreen.notify_confirm('Error: {}'.format(e))
+			npyscreen.notify_confirm('Error initializing {} plugin: {}'.format(plugin, e))
 			return None
 		
 	def update_plugins(self):
