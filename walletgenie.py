@@ -68,6 +68,68 @@ class MinimalActionFormV2WithMenus(npyscreen.ActionFormV2WithMenus):
 			None
 		)
 
+class PopupPrompt(MinimalActionFormV2WithMenus):
+	DEFAULT_LINES = 12
+	DEFAULT_COLUMNS = 60
+	SHOW_ATX = 12
+	SHOW_ATY = 3
+	OK_BUTTON_TEXT = 'OK'
+	
+	def __init__(self, *args, **kwargs):
+		self.disp_msg = ''
+		if 'msg' in kwargs:
+			self.disp_msg = kwargs['msg']
+		self.disp_name = ''
+		if 'title' in kwargs:
+			self.disp_name = kwargs['title']
+		super(PopupPrompt, self).__init__(*args, **kwargs)
+	
+	def create(self):
+		self.add(npyscreen.TitleFixedText, name=self.disp_name, value=self.disp_msg, editable=False)
+	
+	def on_ok(self):
+		return False
+
+class ChoicePopup(MinimalActionFormV2WithMenus):
+	DEFAULT_LINES = 14
+	DEFAULT_COLUMNS = 80
+	SHOW_ATX = 10
+	SHOW_ATY = 2
+	OK_BUTTON_TEXT = 'OK'
+	
+	def __init__(self, *args, **kwargs):
+		self.disp_choices = None
+		if 'choices' not in kwargs:
+			self.editing = False
+		else:
+			self.disp_choices = kwargs['choices']
+		
+		self.disp_name = 'Select an option'
+		if 'name' in kwargs:
+			self.disp_name = kwargs['name']
+		
+		super(ChoicePopup, self).__init__(*args, **kwargs)
+	
+	def create(self):
+		self.select = self.add(
+			npyscreen.TitleSelectOne, name=self.disp_name, 
+			values=self.disp_choices,
+			scroll_exit=True, width=1
+		)
+		self.selected = None
+	
+	def on_ok(self):
+		objs = self.select.get_selected_objects()
+		if objs:
+			self.selected = objs[0]
+			self.selectedid = self.select.values.index(self.selected)
+			return False
+		else:
+			PopupPrompt(msg='You must select something.', title='Error!').edit()
+			self.select.value = [0] # just set the first item to be selected
+			self.display() # refresh the widget so the value appears to be selected (otherwise it will be selected, it will just be invisible to the user)
+			return True
+
 class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 	OK_BUTTON_TEXT = 'Quit (q)'
 	

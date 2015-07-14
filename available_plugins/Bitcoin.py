@@ -16,11 +16,12 @@ class Bitcoin(WGPlugin):
 		self.config_file = 'wgbitcoin.conf'
 		self.conf_values = {
 			'rpcpassword': None,
-			'rpcuser': 'rpc', 'rpcssl': 0,
+			'rpcuser': 'rpc', 'rpcssl': '0',
 			'rpcport': '8332', 'rpcurl': '127.0.0.1'
 		}
 		
 		wgc = WalletGenieConfig()
 		self.rpcd = wgc.check_load_config(self.config_file, wanted_values=self.conf_values)
+		#wgc.set_from_coin_or_text(self.config_file, config_vars=self.conf_values)
 		#if self.rpcd:
-		npyscreen.notify_confirm('{}'.format(self.rpcd))
+		#npyscreen.notify_confirm('{}'.format(self.rpcd))
