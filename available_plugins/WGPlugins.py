@@ -41,6 +41,15 @@ class WGPlugin(object):
 	def cleanup(self):
 		pass
 	
+	def on_plugin_update(self, plugins, loaded_plugins, active_plugin):
+		self.available_plugins = plugins
+		self.active_plugins = loaded_plugins
+		self.active_plugin = active_plugin
+	
+	def output(self, message, title='Output'):
+		#PopupPrompt(msg=message).edit()
+		npyscreen.notify_confirm(message, title=title, wide=True)
+	
 	def to_satoshis(self, num):
 		return int( decimal.Decimal(num) * decimal.Decimal(1e8) )
 	
@@ -48,13 +57,8 @@ class WGPlugin(object):
 		return decimal.Decimal(num) / decimal.Decimal(1e8)
 		
 	def formatted(self, f):
-		return format(float(f), ',.8f').rstrip('0').rstrip('.')
+		return format(decimal.Decimal(f), ',.8f').rstrip('0').rstrip('.')
 	
-	def on_plugin_update(self, plugins, loaded_plugins, active_plugin):
-		self.available_plugins = plugins
-		self.active_plugins = loaded_plugins
-		self.active_plugin = active_plugin
-
 class WalletGenieImportError(Exception):
 	def __init__(self, message):
 		super(WalletGenieImportError, self).__init__(message)

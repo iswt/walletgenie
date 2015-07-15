@@ -134,7 +134,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 	OK_BUTTON_TEXT = 'Quit (q)'
 	
 	_version = '0.15'
-	_welcome_msg = '* Hello, I am the Wallet Genie v{} *'.format(_version)
+	_welcome_msg = 'Hello, I am the Wallet Genie.'.format(_version)
 	
 	plugins = None
 	active_plugin = None # which plugin (e.g. key in the loaded_plugins dictionary) is currently active
@@ -145,7 +145,10 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 	def create(self):
 		
 		self.how_exited_handers[npyscreen.wgwidget.EXITED_ESCAPE] = self.exit_app
-		self.name = self._welcome_msg
+		self.name = 'Wallet Genie v{}'.format(self._version)
+		
+		self.add(npyscreen.TitleFixedText, name=' ', value=self._welcome_msg, editable=False)
+		self.add(npyscreen.TitleFixedText, name='shortcut', value='Plugin functions', editable=False, rely=10)
 		
 		self.helper_menu = self.add_menu(name='Options', shortcut='^X')
 		self.helper_menu.addItem('Enable a Plugin (e)', self.enable_plugin, '1')
@@ -190,11 +193,13 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 					if p not in self.loaded_plugins.keys():
 						#npyscreen.notify_confirm('Load {}'.format(p))
 						self.load_plugin(p)
+						self.add_plugin_widgets(p)
 						
 				for p in [x for x in self._available_plugins if x not in chosen_plugins]:# disable these plugins
 					if p in self.loaded_plugins.keys():
 						#npyscreen.notify_confirm('Unload {}'.format(p))
 						self.unload_plugin(p)
+						#self.remove_plugin_widgets(p)
 				
 				self.check_plugins()
 				loaded_names = list(self.loaded_plugins.keys())
@@ -211,8 +216,13 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 				if self.LASTFORM == 'SwitchPluginForm':
 					if self.switch_plugin_form.selected:
 						self.check_plugins()
+						
 						self.active_plugin = self.switch_plugin_form.selected[0]
 						self.switch_plugin_form.select.value = sorted(self.loaded_plugins.keys()).index(self.active_plugin)
+						
+						#self.show_plugin_widgets(self.active_plugin, True)
+						#for p in [x for x in self.loaded_plugins.keys() if x != self.active_plugin]:
+						#	self.show_plugin_widgets(p, False)
 				else:
 					if self.switch_plugin_form.select.values:
 						self.parentApp.switchForm('SwitchPluginForm')
@@ -220,6 +230,25 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 						self.parentApp.switchForm('PluginSelectForm')
 			else:
 				self.edit()
+	
+	def add_plugin_widgets(self, plugin):
+		if plugin not in self.loaded_plugins.keys():
+			return None
+		
+		if 'widgets' not in self.loaded_plugins[plugin].keys():
+			self.loaded_plugins[plugin]['widgets'] = []
+		
+		for i, (shortcut, menud) in enumerate(sorted(self.loaded_plugins[plugin]['plugin_class'].main_menu.items())):
+			if i == 0:
+				self.loaded_plugins[plugin]['widgets'].append(
+					self.add(npyscreen.TitleFixedText, name=shortcut, value=menud['description'], editable=False, rely=12)
+				)
+			else:
+				self.loaded_plugins[plugin]['widgets'].append(
+					self.add(npyscreen.TitleFixedText, name=shortcut, value=menud['description'], editable=False)
+				)
+			self.add_handlers({shortcut: lambda x: menud['callback']()})
+		
 	
 	def onFormChange(self, lastform):
 		self.LASTFORM = lastform
