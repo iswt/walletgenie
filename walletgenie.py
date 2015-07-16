@@ -36,6 +36,30 @@ import imp
 class PluginPrompterForm(npyscreen.ActionFormV2):
 	OK_BUTTON_TEXT = 'OK'
 	CANCEL_BUTTON_TEXT = 'Cancel'
+	want_cancel_button = False
+	
+	def __init__(self, *args, **kwargs):
+		if 'want_cancel_button' in kwargs and kwargs['want_cancel_button']:
+			self.want_cancel_button = True
+		super(PluginPrompterForm, self).__init__(*args, **kwargs)
+	
+	def create_control_buttons(self):
+		self._add_button(
+			'ok_button', 
+			self.__class__.OKBUTTON_TYPE, self.__class__.OK_BUTTON_TEXT,
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[0],
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[1] - len(self.__class__.OK_BUTTON_TEXT),
+			None
+		)
+		if self.want_cancel_button:
+			self._add_button(
+				'cancel_button', 
+				self.__class__.CANCELBUTTON_TYPE, 
+				self.__class__.CANCEL_BUTTON_TEXT,
+				0 - self.__class__.CANCEL_BUTTON_BR_OFFSET[0],
+				0 - self.__class__.CANCEL_BUTTON_BR_OFFSET[1] - len(self.__class__.CANCEL_BUTTON_TEXT),
+				None
+			)
 	
 	def create(self):
 		self.how_exited_handers[npyscreen.wgwidget.EXITED_ESCAPE] = self.switch_back
@@ -54,10 +78,6 @@ class PluginPrompterForm(npyscreen.ActionFormV2):
 	def on_ok(self):
 		self.selected = self.select.get_selected_objects()
 		self.switch_back()
-	
-	def on_cancel(self):
-		#self.switch_back()
-		return True
 
 class MinimalActionFormV2WithMenus(npyscreen.ActionFormV2WithMenus):
 	def create_control_buttons(self):
@@ -85,8 +105,37 @@ class PopupPrompt(MinimalActionFormV2WithMenus):
 			self.disp_name = kwargs['title']
 		super(PopupPrompt, self).__init__(*args, **kwargs)
 	
+	def create_control_buttons(self):
+		self._add_button(
+			'ok_button', 
+			self.__class__.OKBUTTON_TYPE, self.__class__.OK_BUTTON_TEXT,
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[0],
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[1] - len(self.__class__.OK_BUTTON_TEXT),
+			None
+		)
+	
 	def create(self):
-		self.add(npyscreen.TitleFixedText, name=self.disp_name, value=self.disp_msg, editable=False)
+		self.add(npyscreen.TitleFixedText, name=self.disp_name, value=self.disp_msg, editable=False, wrap=True)
+	
+	def on_ok(self):
+		return False
+	
+class PasswordPrompt(npyscreen.ActionFormV2):
+	#SHOW_ATX = 20
+	#SHOW_ATY = 15
+	OK_BUTTON_TEXT = 'OK'
+	
+	def create_control_buttons(self):
+		self._add_button(
+			'ok_button', 
+			self.__class__.OKBUTTON_TYPE, self.__class__.OK_BUTTON_TEXT,
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[0],
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[1] - len(self.__class__.OK_BUTTON_TEXT),
+			None
+		)
+	
+	def create(self):
+		self.pwd = self.add(npyscreen.TitlePassword, name='Password: ')
 	
 	def on_ok(self):
 		return False
@@ -176,7 +225,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		)
 		self.parentApp.registerForm('PluginSelectForm', self.ppf)
 		
-		self.switch_plugin_form = PluginPrompterForm()
+		self.switch_plugin_form = PluginPrompterForm(want_cancel_button=True)
 		self.switch_plugin_form.select = self.switch_plugin_form.add(npyscreen.TitleSelectOne, name='Select a plugin', values=self._available_plugins, scroll_exit=True, width=1)
 		self.parentApp.registerForm('SwitchPluginForm', self.switch_plugin_form)
 		
@@ -184,26 +233,6 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		if not self.ppf.selected and not self.loaded_plugins:
 			self.parentApp.switchForm('PluginSelectForm')
 		else:
-			'''
-			if coming from enable/disable form:
-				grab a list of *new* plugins to load
-				grab a list of which plugins to unload
-				
-				unload the plugins which require it
-				load the *new* plugins
-				
-				if we did not load any *new* plugins:
-					pass
-				else:
-					set the last plugin loaded to be the active plugin
-					adjust the SwitchPlugin / EnablePlugin forms values respectively
-			
-			else if coming from switch plugin form:
-				set the active plugin to the newly selected plugin
-				enable(show) the plugins widgets
-				disable(hide) all other loaded plugins
-					
-			'''
 			if self.LASTFORM == 'PluginSelectForm': # coming from the enable/disable plugin form
 				chosen = self.ppf.selected
 				if not chosen:
@@ -229,7 +258,10 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 			
 			else:
 				if not self.active_plugin:
-					self.parentApp.switchForm('SwitchPluginForm')
+					if not self.loaded_plugins:
+						self.parentApp.switchForm('PluginSelectForm')
+					else:
+						self.parentApp.switchForm('SwitchPluginForm')
 				else:
 					self.edit()
 	
@@ -317,7 +349,6 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 	
 	def switch_plugin(self, unknown=None):
 		self.parentApp.switchForm('SwitchPluginForm')
-	
 	
 	def set_active_plugin(self, plugin):# convenience function
 		return self.switch_active_plugin(plugin)

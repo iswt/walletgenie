@@ -48,7 +48,7 @@ class WGPlugin(object):
 	
 	def output(self, message, title='Output'):
 		#PopupPrompt(msg=message).edit()
-		npyscreen.notify_confirm(message, title=title, wide=True)
+		npyscreen.notify_confirm(message, title=title, wide=True, wrap=True)
 	
 	def to_satoshis(self, num):
 		return int( decimal.Decimal(num) * decimal.Decimal(1e8) )
