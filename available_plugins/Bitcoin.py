@@ -34,7 +34,7 @@ class Bitcoin(WGPlugin):
 		}
 		
 		self.main_menu = {
-			'0': {'description': 'Print Network Diagnostics', 'callback': self.show_diagnostics},
+			'0': {'description': 'Show Network Diagnostics', 'callback': self.show_diagnostics},
 		}
 		
 		wgc = WalletGenieConfig()

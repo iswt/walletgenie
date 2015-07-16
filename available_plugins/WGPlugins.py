@@ -15,7 +15,7 @@ except ImportError:
 	except ImportError:
 		raise ImportError('Unable to import ConfigParser, install it with: `pip install ConfigParser`')
 try:
-	import StringIO
+	from StringIO import StringIO
 except ImportError:
 	from io import StringIO
 import itertools
