@@ -44,7 +44,7 @@ class Bitcoin(WGPlugin):
 			'0': {'description': 'Show Network Diagnostics', 'callback': self.show_diagnostics},
 			'1': {'description': 'Show Bitcoin Balance', 'callback': self.show_balance},
 			'2': {'description': 'Sign a message', 'callback': self._prompt_sign_message},
-			#'3': {'description': 'Verify a signed message', 'callback': self._prompt_verify_message} # enabling this makes all shortcuts call this callback function ?!
+			'3': {'description': 'Verify a signed message', 'callback': self._prompt_verify_message},
 		}
 		
 		wgc = WalletGenieConfig()
@@ -64,7 +64,7 @@ class Bitcoin(WGPlugin):
 			)
 		)
 	
-	def show_diagnostics(self):
+	def show_diagnostics(self, *args):
 		outs = 'I am attempting to speak to the bitcoin network for you...\n'
 		btci = self.access.getinfo()
 		outs += '\n\nUsing my awesome powers, I am now speaking to bitcoind v{}, which is connected to {} other nodes around the world.\n\nThe last block I have seen on the blockchain is {}.\n'.format(btci['version'], btci['connections'], btci['blocks'])
@@ -80,7 +80,7 @@ class Bitcoin(WGPlugin):
 		
 		self.output(outs)
 	
-	def show_balance(self):
+	def show_balance(self, *args):
 		self.output('You have {} BTC in your bitcoin coffers'.format(self.from_satoshis(self.access.getbalance())))
 	
 	def sign_message(self, address, message):
@@ -89,7 +89,7 @@ class Bitcoin(WGPlugin):
 		self.try_lock_wallet()
 		return signed
 	
-	def _prompt_sign_message(self):
+	def _prompt_sign_message(self, *args):
 		Options = npyscreen.OptionList()
 		options = Options.options
 		
@@ -137,7 +137,7 @@ class Bitcoin(WGPlugin):
 				outmsg += '\n(tip: `pip install pyperclip` if you want me to be able to copy this text)'
 			self.output(outmsg)
 	
-	def _prompt_verify_message(self):
+	def _prompt_verify_message(self, *args):
 		Options = npyscreen.OptionList()
 		options = Options.options
 		

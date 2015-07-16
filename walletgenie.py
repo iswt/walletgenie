@@ -284,7 +284,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 			# try to add the shortcut to the main form
 			# don't overwrite existing handlers (shapeshift etc.)
 			if shortcut not in self.handlers.keys():
-				self.add_handlers({shortcut: lambda x: menud['callback']()})
+				self.add_handlers({shortcut: menud['callback']})
 	
 	def remove_plugin_widgets(self, plugin):
 		if plugin not in self.loaded_plugins.keys():
@@ -316,7 +316,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		for i, (shortcut, menud) in enumerate(sorted(self.loaded_plugins[plugin]['plugin_class'].main_menu.items())):
 			if show_widgets:
 				if shortcut not in self.handlers.keys():
-					self.add_handlers({shortcut: lambda x: menud['callback']()})
+					self.add_handlers({shortcut: menud['callback']})
 			else:
 				if shortcut in self.handlers.keys():
 					del self.handlers[shortcut]
@@ -461,7 +461,7 @@ class WalletGenieApp(npyscreen.NPSAppManaged):
 		'Light Transparent': npyscreen.Themes.TransparentThemeLightText, 'Dark Transparent': npyscreen.Themes.TransparentThemeDarkText
 	}
 	def onStart(self):
-		npyscreen.setTheme(self.themes['Colorful'])
+		npyscreen.setTheme(self.themes['Default'])
 		self.wgmf = WalletGenie_MainForm()
 		self.registerForm('MAIN', self.wgmf)
 		self.wgmf.postInit()
