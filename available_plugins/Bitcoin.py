@@ -40,10 +40,12 @@ class Bitcoin(WGPlugin):
 		}
 		
 		self.main_menu = {
-			'0': {'description': 'Show Network Diagnostics', 'callback': self.show_diagnostics},
-			'1': {'description': 'Show Bitcoin Balance', 'callback': self.show_balance},
-			'2': {'description': 'Sign a message', 'callback': self._prompt_sign_message},
-			'3': {'description': 'Verify a signed message', 'callback': self._prompt_verify_message},
+			'1': {'description': 'Show Network Diagnostics', 'callback': self.show_diagnostics},
+			'2': {'description': 'Show Bitcoin Balance', 'callback': self.show_balance},
+			'3': {'description': 'Sign a message', 'callback': self._prompt_sign_message},
+			'4': {'description': 'Verify a signed message', 'callback': self._prompt_verify_message},
+			'5': {'description': 'Import a new private key', 'callback': self._prompt_import_privkey},
+			'6': {'description': 'Import a new watch-only address', 'callback': self._prompt_import_watch_address},
 		}
 		
 		wgc = WalletGenieConfig()
@@ -90,6 +92,16 @@ class Bitcoin(WGPlugin):
 	
 	def broadcast_tx(self, stx):
 		tx = self.access._call('sendrawtransaction', stx)
+		return tx
+	
+	def sign_and_broadcast(self, utx):
+		self.try_unlock_wallet()
+		stx = self.sign_tx(utx)
+		if not stx:
+			return None
+		tx = self.broadcast_tx(stx)
+		if not tx:
+			return None
 		return tx
 	
 	def sign_message(self, address, message):
@@ -185,6 +197,52 @@ class Bitcoin(WGPlugin):
 			return active # returns a list of tuples [(address, btc balance), ...]
 		else:
 			return [a[0] for a in active]
+	
+	def _prompt_import_privkey(self, *args):
+		if not npyscreen.notify_yes_no('This process will rescan your wallet, which is likely to take a (potentially very) long time. Are you sure that you want to continue?'):
+			return False
+		
+		cop = ChoiceOptionPrompt(disp_name = 'Import new private key', allow_blank_strings = True, prompt_options = [
+			{'widget': npyscreen.OptionFreeText, 'args': ['privkey:'], 'kwargs': {'value': ''}},
+			{'widget': npyscreen.OptionFreeText, 'args': ['label:'], 'kwargs': {'value': ''}}
+		])
+		cop.edit()
+		d = cop.get_options()
+		privkey = d['privkey:']
+		label = d['label:']
+		
+		self.try_unlock_wallet()
+		suc = self.access._call('importprivkey', privkey, label)
+		self.try_lock_wallet()
+		
+		if suc:
+			self.output('I have successfully imported your private key: {}'.format(suc))
+		else:
+			return None
+	
+	def _prompt_import_watch_address(self, *args):
+		if not npyscreen.notify_yes_no('This process will rescan your wallet, which is likely to take a (potentially very) long time. Are you sure that you want to continue?'):
+			return False
+		
+		def validaddy(addy):
+			if self.is_address_valid(addy):
+				return True
+			else:
+				return '{} is not a valid Bitcoin address'.format(addy)
+		
+		cop = ChoiceOptionPrompt(disp_name = 'Import new watch address', allow_blank_strings = True, prompt_options = [
+			{'widget': npyscreen.OptionFreeText, 'args': ['address:'], 'kwargs': {'value': ''}, 'validator': validaddy},
+			{'widget': npyscreen.OptionFreeText, 'args': ['label:'], 'kwargs': {'value': ''}}
+		])
+		cop.edit()
+		d = cop.get_options()
+		addr = d['address:']
+		label = d['label:']
+		
+		ret = self.access.importaddress(addr, label=label, rescan=True)
+		self.output('I have successfully imported the watch-only address {}'.format(addr))
+		return ret
+		
 	
 	def is_address_valid(self, address):
 		valid = self.access.validateaddress(address)

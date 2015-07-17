@@ -16,6 +16,10 @@ class ChoiceOptionPrompt(npyscreen.ActionFormV2):
 		self.disp_name = 'Enter details'
 		if 'disp_name' in kwargs:
 			self.disp_name = kwargs['disp_name']
+		
+		self.allow_empty_strings = False
+		if 'allow_blank_strings' in kwargs and kwargs['allow_blank_strings']:
+			self.allow_empty_strings = True
 			
 		super(ChoiceOptionPrompt, self).__init__(*args, **kwargs)
 	
@@ -65,10 +69,10 @@ class ChoiceOptionPrompt(npyscreen.ActionFormV2):
 				if type(ret) is str:
 					npyscreen.notify_confirm(ret)
 					return True
-			
-			if not val or val == '':
-				npyscreen.notify_confirm('Option `{}` cannot be blank'.format(var))
-				return True
+			if not self.allow_empty_strings:
+				if not val or val == '':
+					npyscreen.notify_confirm('Option `{}` cannot be blank'.format(var))
+					return True
 			
 		return False
 	
