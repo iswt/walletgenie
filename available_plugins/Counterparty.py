@@ -10,5 +10,5 @@ class Counterparty(WGPlugin):
 			'0': {'description': 'Show CounterParty Network Diagnostics', 'callback': self.show_diagnostics},
 		}
 	
-	def show_diagnostics(self):
+	def show_diagnostics(self, *args):
 		pass

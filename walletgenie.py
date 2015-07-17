@@ -33,6 +33,81 @@ import curses
 
 import imp
 
+class ChoiceOptionPrompt(npyscreen.ActionFormV2):
+	#OK_BUTTON_BR_OFFSET = (2, 10)
+	#CANCEL_BUTTON_BR_OFFSET = (2, 12)
+	
+	cancelled = False
+	def __init__(self, *args, **kwargs):
+		self.prompt_options = kwargs['prompt_options']
+		for po in self.prompt_options:
+			if 'kwargs' not in po:
+				po['kwargs'] = {}
+			if 'args' not in po:
+				po['args'] = []
+		
+		self.disp_name = 'Enter details'
+		if 'disp_name' in kwargs:
+			self.disp_name = kwargs['disp_name']
+			
+		super(ChoiceOptionPrompt, self).__init__(*args, **kwargs)
+	
+	def create_control_buttons(self):
+		self._add_button(
+			'ok_button', 
+			self.__class__.OKBUTTON_TYPE, self.__class__.OK_BUTTON_TEXT,
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[0],
+			0 - self.__class__.OK_BUTTON_BR_OFFSET[1] - len(self.__class__.OK_BUTTON_TEXT),
+			None
+		)
+	
+	def create(self):
+		self.name = self.disp_name
+		
+		self.Options = npyscreen.OptionList()
+		self.options = self.Options.options
+		
+		self.validation_funcs = {}
+		for po in self.prompt_options:
+			opt = po['widget'](*po['args'], **po['kwargs'])
+			self.options.append(opt)
+			if 'validator' in po:
+				self.validation_funcs[opt] = po['validator']
+		
+		self.option_display = self.add(npyscreen.OptionListDisplay, values=self.Options.options, scroll_exit=True, max_height=None)
+		
+		self.add_handlers({'^Q': self.onquit, 'q': self.onquit})
+	
+	def onquit(self, *args):
+		self.cancelled = True
+		self.exit_editing()
+	
+	def get_options(self):
+		d = {}
+		for o in self.Options.options:
+			d[o.get_real_name()] = o.get()
+		return d
+	
+	def on_ok(self):
+		for o in self.Options.options:
+			var = o.get_real_name()
+			val = o.get()
+			
+			if o in self.validation_funcs:
+				ret = self.validation_funcs[o](val)
+				if type(ret) is str:
+					npyscreen.notify_confirm(ret)
+					return True
+			
+			if not val or val == '':
+				npyscreen.notify_confirm('Option `{}` cannot be blank'.format(var))
+				return True
+			
+		return False
+	
+	def on_cancel(self):
+		return False
+
 class PluginPrompterForm(npyscreen.ActionFormV2):
 	OK_BUTTON_TEXT = 'OK'
 	CANCEL_BUTTON_TEXT = 'Cancel'
@@ -415,6 +490,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		
 		npyscreen.notify_confirm('Successfully loaded {}'.format(plugin))
 		self.update_plugins()
+		return True
 	
 	def unload_plugin(self, plugin):
 		if plugin not in self.loaded_plugins.keys():
@@ -429,6 +505,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		self.remove_plugin_widgets(plugin)
 		
 		self.update_plugins()
+		return True
 	
 	def import_plugin(self, plugin):
 		try:

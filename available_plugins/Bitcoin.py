@@ -1,7 +1,7 @@
 from wgplugins.WGPlugins import WGPlugin, WalletGenieConfig, WalletGenieImportError
 from wgplugins.WGPlugins import PopupPrompt, ChoicePopup
 
-from walletgenie import PasswordPrompt
+from walletgenie import PasswordPrompt, ChoiceOptionPrompt
 try:
 	from bitcoin.core import b2x, b2lx
 	import bitcoin.rpc
@@ -83,6 +83,16 @@ class Bitcoin(WGPlugin):
 	def show_balance(self, *args):
 		self.output('You have {} BTC in your bitcoin coffers'.format(self.from_satoshis(self.access.getbalance())))
 	
+	def sign_tx(self, utx):
+		stx = self.access._call('signrawtransaction', utx)
+		if not stx or not stx['complete']:
+			return None
+		return stx['hex']
+	
+	def broadcast_tx(self, stx):
+		tx = self.access._call('sendrawtransaction', stx)
+		return tx
+	
 	def sign_message(self, address, message):
 		self.try_unlock_wallet()
 		signed = self.access.signmessage(address, message)
@@ -90,43 +100,20 @@ class Bitcoin(WGPlugin):
 		return signed
 	
 	def _prompt_sign_message(self, *args):
-		Options = npyscreen.OptionList()
-		options = Options.options
-		
 		addresses = self.get_wallet_addresses(allow_empty=True)
-		
-		options.append(npyscreen.OptionSingleChoice('Address:', choices=addresses))
-		options.append(npyscreen.OptionFreeText('Message:', value=''))
-		
-		def validate_options(opts):
-			for (var, val) in opts:
-				if not val or val == '':
-					npyscreen.notify_confirm('Option `{}` cannot be blank'.format(var))
-					return True
-		
-		def opt_cancel():
-			return False
-		
-		fsp = npyscreen.ActionFormV2(name = 'Enter Message Signing Details')
-		ms = fsp.add(npyscreen.OptionListDisplay, name='Message Signing Details', values=options, scroll_exit=True, max_height=None)
-		
-		fsp.on_ok = lambda: validate_options([(o.get_real_name(), o.get()) for o in Options.options])
-		fsp.on_cancel = lambda: opt_cancel()
-		
-		fsp.edit()
-		
-		d = {}
-		for o in Options.options:
-			d[o.get_real_name()] = o.get()
-		
+		cop = ChoiceOptionPrompt(disp_name = 'Message Signing Details', prompt_options = [
+			{'widget': npyscreen.OptionFreeText, 'args': ['Message:'], 'kwargs': {'value': ''}},
+			{'widget': npyscreen.OptionSingleChoice, 'args': ['Address:'], 'kwargs': {'choices': addresses}}
+		])
+		cop.edit()
+		d = cop.get_options()
 		msg = d['Message:']
 		addresses = d['Address:']
 		
-		if msg == '' or addresses == '': # canceled
+		if cop.cancelled:
 			return False 
 		
 		addy = addresses[0]
-		
 		tx = self.sign_message(addy, msg)
 		if tx:
 			outmsg = 'Address: {}\nSigned: {}\nMessage: {}'.format(addy, tx, msg)
@@ -135,51 +122,35 @@ class Bitcoin(WGPlugin):
 				outmsg += '\n(text has been copied to the clipboard)'
 			except NameError:
 				outmsg += '\n(tip: `pip install pyperclip` if you want me to be able to copy this text)'
-			self.output(outmsg)
+			self.output(outmsg, title='Signed message')
 	
 	def _prompt_verify_message(self, *args):
-		Options = npyscreen.OptionList()
-		options = Options.options
+		def validaddy(addy):
+			if self.is_address_valid(addy):
+				return True
+			else:
+				return '{} is not a valid Bitcoin address'.format(addy)
 		
-		addresses = self.get_wallet_addresses(allow_empty=True)
-		
-		options.append(npyscreen.OptionFreeText('Signature:', value=''))
-		options.append(npyscreen.OptionFreeText('Message:', value=''))
-		options.append(npyscreen.OptionFreeText('Address:', value=''))
-		
-		def validate_options(opts):
-			for (var, val) in opts:
-				if not val or val == '':
-					npyscreen.notify_confirm('Option `{}` cannot be blank'.format(var))
-					return True
-		
-		def opt_cancel():
-			return False
-		
-		fsp = npyscreen.ActionFormV2(name = 'Enter Message Verification Details')
-		ms = fsp.add(npyscreen.OptionListDisplay, name='Message Verification Details', values=options, scroll_exit=True, max_height=None)
-		
-		fsp.on_ok = lambda: validate_options([(o.get_real_name(), o.get()) for o in Options.options])
-		fsp.on_cancel = lambda: opt_cancel()
-		
-		fsp.edit()
-		
-		d = {}
-		for o in Options.options:
-			d[o.get_real_name()] = o.get()
+		cop = ChoiceOptionPrompt(disp_name = 'Message Verification Details', prompt_options = [
+			{'widget': npyscreen.OptionFreeText, 'args': ['Signature:'], 'kwargs': {'value': ''}},
+			{'widget': npyscreen.OptionFreeText, 'args': ['Message:'], 'kwargs': {'value': ''}},
+			{'widget': npyscreen.OptionFreeText, 'args': ['Address:'], 'kwargs': {'value': ''}, 'validator': validaddy},
+		])
+		cop.edit()
+		d = cop.get_options()
 		
 		signature = d['Signature:']
 		message = d['Message:']
 		address = d['Address:']
 		
-		if signature == '' or message == '' or address == '': # canceled
+		if cop.cancelled:
 			return False 
 		
 		signed = self.access.verifymessage(address, signature, message)
 		if signed:
-			self.output('I can confirm the message was definitely signed by {}'.format(address))
+			self.output('I can confirm the message was definitely signed by {}'.format(address), title='Successful verification')
 		else:
-			self.output('The message failed verification. (double check that your input was correct)')
+			self.output('The message failed verification. (double check that your input was correct)', title='Message failed verification')
 	
 	def get_wallet_addresses(self, allow_empty=False, return_balances=False):
 		wallet_addresses = self.access.listaddressgroupings()
@@ -216,12 +187,24 @@ class Bitcoin(WGPlugin):
 		else:
 			return [a[0] for a in active]
 	
+	def is_address_valid(self, address):
+		valid = self.access.validateaddress(address)
+		if not valid['isvalid']:
+			return False
+		return True
+	
 	def is_wallet_encrypted(self):
 		info = self.access.getinfo()
 		if 'unlocked_until' in info.keys():
 			return True
 		else:
 			return False
+	
+	def import_privkey(self, privkey, label=''):
+		self.try_unlock_wallet()
+		imported = self.access._call('importprivkey', privkey, label)
+		self.try_lock_wallet()
+		return imported
 	
 	def unlock_wallet(self, duration=300):
 		pp = PasswordPrompt()
