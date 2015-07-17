@@ -1,7 +1,6 @@
 from wgplugins.WGPlugins import WGPlugin, WalletGenieConfig, WalletGenieImportError
-from wgplugins.WGPlugins import PopupPrompt, ChoicePopup
-
-from walletgenie import PasswordPrompt, ChoiceOptionPrompt
+from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt
+from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user
 try:
 	from bitcoin.core import b2x, b2lx
 	import bitcoin.rpc

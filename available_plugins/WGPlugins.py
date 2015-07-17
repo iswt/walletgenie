@@ -24,7 +24,7 @@ import npyscreen
 import glob
 
 from walletgenie import USER_CONFIG_DIR, PLUGINS_DIR
-from walletgenie import PopupPrompt, ChoicePopup
+from lib.prompts import PopupPrompt, ChoicePopup
 
 class WGPlugin(object):
 	
