@@ -18,7 +18,7 @@ try:
 except ImportError:
 	from io import StringIO
 try:
-	import fcntl
+	import fcntl, termios, struct
 except ImportError:
 	pass # no fcntl on windows
 import itertools
@@ -75,10 +75,6 @@ class WGPluginForm(WGPlugin):
 		super(WGPluginForm, self).create()
 		self.name = self.parent.name
 	
-	#def activate(self):
-	#	#super(WGPluginForm, self).activate()
-	#	self.edit()
-	
 	def get_form(self):
 		return self
 	
@@ -91,21 +87,77 @@ class WGPluginForm(WGPlugin):
 			pass
 
 class DefaultPluginForm(WGPluginForm, PluginViewForm):
+	_default_form_hotkey = None
+	want_forms = True
+	current_forms = {}
+	
 	def __init__(self, *args, **kwargs):
 		super(DefaultPluginForm, self).__init__(*args, **kwargs)
 	
-	def register_form_func(self, hotkey, func):
+	def register_form_func(self, hotkey, func, bot_disp_tup):
+		def callfunc(func):
+			self.exit_all_forms(None)
+			self.want_forms = True
+			
+			f = func()
+			f.add_handlers(self.handlers)
+			f.handlers.update({'^Q': self.exit_all_forms})
+			
+			self.current_forms[hotkey] = f
+			f.edit()
+		
+		self.add_handlers({hotkey: lambda x: callfunc(func)})
+		if bot_disp_tup not in self.bottom_commands:
+			self.bottom_commands.append(bot_disp_tup)
+			self.bottom_commands = sorted(self.bottom_commands)
+	
+	def exit_all_forms(self, *args):
+		for k, f in list(self.current_forms.items()):
+			f.exit_editing()
+			del self.current_forms[k]
+		self.want_forms = False
+	
+	def activate(self):
+		if self._default_form_hotkey and self.want_forms:
+			self.handlers[self._default_form_hotkey](self._default_form_hotkey)
+		else:
+			self.edit()
+	
+	'''def register_form_funcs(self, hkd):
 		def callfunc(func):
 			f = func()
 			#f.add_handlers(self.handlers)
 			f.edit()
-		
-		self.add_handlers({hotkey: lambda x: callfunc(func)})
+			
+		for k, v in hkd.items():
+			isdefault = False
+			if type(v) is dict:
+				#npyscreen.notify_confirm('{}'.format(v))
+				self.add_handlers({k: lambda x: callfunc(v['callback'])})
+				if 'default' in v:
+					isdefault = v['default']
+			else:
+				npyscreen.notify_confirm('{}'.format(v))
+				self.add_handlers({k: lambda x: callfunc(v)})
+			if isdefault:
+				self.set_default_form(k)
+	'''
+	def switch_form_by_hotkey(self, hotkey):
+		if hotkey not in self.handlers:
+			return None
+		self.handlers[hotkey](hotkey)
+	
+	def set_default_form(self, hotkey):
+		if hotkey not in self.handlers:
+			return None
+		self._default_form_hotkey = hotkey
 	
 	def create(self):
 		super(DefaultPluginForm, self).create()
-		#self.add_widget(npyscreen.TitleFixedText, name='ok', value='Test')
-		self.add(npyscreen.TitleFixedText, name='ok', value='Test')
+		#note: setting all of these widgets to not be editable will result in an exception being thrown
+		self.add(npyscreen.TitleFixedText, name=' ', value='Welcome to the WalletGenie Bitcoin plugin', editable=False)
+		self.add(npyscreen.TitleFixedText, name='[^]Q', value='Quit', rely=5)
+		self.add(npyscreen.TitleFixedText, name='^X', value='Options')
 		
 
 class PluginForm(object):
@@ -118,168 +170,6 @@ class PluginForm(object):
 	except (ValueError, NameError):
 		DEFAULT_LINES = curses.newwin(0, 0).getmaxyx()[0] - 5
 
-#class PluginFormMutt(PluginForm, npyscreen.FormMutt):
-class PluginFormMutt(npyscreen.FormMutt):
-	SHOW_ATY = 2
-	#DEFAULT_LINES = npyscreen.FormMutt.curses_pad.getmaxyx()[0] - 1
-	DEFAULT_LINES = curses.newwin(0, 0).getmaxyx()[0] - 5
-	
-	def __init__(self, *args, **kwargs):
-		#self.DEFAULT_LINES = 20
-		super(PluginFormMutt, self).__init__(*args, **kwargs)
-		#self.lines -= 1 + self.BLANK_LINES_BASE
-	
-	def draw_form(self):
-		MAXY, MAXX = self.lines, self.columns #self.curses_pad.getmaxyx()
-		self.curses_pad.hline(0, 0, curses.ACS_HLINE, MAXX-1)  
-		self.curses_pad.hline(MAXY-2-self.BLANK_LINES_BASE, 0, curses.ACS_HLINE, MAXX-1)
-	
-	'''def create(self):
-		MAXY, MAXX = self.lines, self.columns
-
-		self.wStatus1 = self.add(
-			self.__class__.STATUS_WIDGET_CLASS,  rely=0, 
-			relx=self.__class__.STATUS_WIDGET_X_OFFSET,
-			editable=False,  
-		)
-
-		if self.__class__.MAIN_WIDGET_CLASS:
-			self.wMain    = self.add(
-				self.__class__.MAIN_WIDGET_CLASS,    
-				rely=self.__class__.MAIN_WIDGET_CLASS_START_LINE,  
-				relx=0,     max_height = -2,
-			)
-		
-		self.wStatus2 = self.add(
-			self.__class__.STATUS_WIDGET_CLASS,  rely=MAXY-2-self.BLANK_LINES_BASE, 
-			relx=self.__class__.STATUS_WIDGET_X_OFFSET,
-			editable=False,  
-		)
-
-		if not self.__class__.COMMAND_WIDGET_BEGIN_ENTRY_AT:
-			self.wCommand = self.add(
-				self.__class__.COMMAND_WIDGET_CLASS, 
-				name=self.__class__.COMMAND_WIDGET_NAME,
-				rely = MAXY-1-self.BLANK_LINES_BASE, relx=0,
-			)
-		else:
-			self.wCommand = self.add(
-				self.__class__.COMMAND_WIDGET_CLASS, name=self.__class__.COMMAND_WIDGET_NAME,
-				rely = MAXY-2-self.BLANK_LINES_BASE, relx=0,
-				begin_entry_at = self.__class__.COMMAND_WIDGET_BEGIN_ENTRY_AT,
-				allow_override_begin_entry_at = self.__class__.COMMAND_ALLOW_OVERRIDE_BEGIN_ENTRY_AT
-			)
-		
-		self.wStatus1.important = True
-		self.wStatus2.important = True
-		self.nextrely = 2'''
-
-'''class PluginViewForm(npyscreen.FormBaseNew):
-	#DEFAULT_LINES = 10
-	#DEFAULT_COLUMNS = 5
-	#SHOW_ATX = 
-	#SHOW_ATY = 2
-	
-	def draw_form(self):
-		super(PluginViewForm, self).draw_form()
-		MAXY, MAXX = self.lines, self.columns
-	
-	def create(self):
-		self.add(npyscreen.TitleFixedText, name='inner', value='inner test')
-'''
-'''class DefaultPluginForm(WGPluginForm, npyscreen.FormMutt):
-	#MAIN_WIDGET_CLASS = npyscreen.MultiLineEdit
-	MAIN_WIDGET_CLASS = None
-	COMMAND_WIDGET_NAME = 'console'
-	
-	#commands = [] # [(firstpart, secondpart)]
-	bottom_commands = [] # [(commandstr, index to highlight), ...]
-	command_str_color = curses.A_BOLD
-	command_hotkey_color = curses.A_UNDERLINE | curses.A_BOLD | curses.color_pair(curses.COLOR_MAGENTA)
-	
-	def __init__(self, *args, **kwargs):
-		super(DefaultPluginForm, self).__init__(*args, **kwargs)
-	
-	def add_views(self, parent, d):
-		for hotkey, tup in d.items():
-			addfunc, cbfunc = tup
-			#def cb(p, f):
-			#	return self._before_callback(p, f)
-			#f = lambda x : cb(parent, addfunc)
-			#self.add_handlers({hotkey: lambda : cb(parent, addfunc)})
-			self.add_handlers({hotkey: self._gen_callback(parent, addfunc)})
-	
-	def _gen_callback(self, parent, func):
-		#npyscreen.notify_confirm('{}\n{}'.format(parent, func))
-		def cb(*args):
-			parent._clear_all_widgets()
-			#self._clear_all_widgets()
-			func()
-			self.display()
-			parent.display()
-		return cb
-	
-	def create(self):
-		super(DefaultPluginForm, self).create()
-		self.wStatus1.value = self.name
-		
-		self.wCommand.editable = False
-		
-		self.add_handlers({
-			'^Q': self.cleanup, 'q': self.cleanup
-		})
-		
-		#self.curses_pad.attrset(0)
-		#self.add(npyscreen.TitleFixedText, name='ok', value='Test', rely=self.lines-3)
-		#self.wStatus2.value = 'val1-|-val2'
-	
-	def draw_form(self):
-		super(DefaultPluginForm, self).draw_form()
-		MAXY, MAXX = self.lines, self.columns
-		slen = 0
-		
-		#top_bar = 
-		bot_bar = MAXY - 3 - self.BLANK_LINES_BASE
-		
-		if self.bottom_commands:
-			if self.bottom_commands[0][1] is not None:
-				s = self.bottom_commands[0][0]
-				cindex = self.bottom_commands[0][1]
-				
-				firsts = s[ : cindex]
-				ch = s[cindex]
-				lasts = s[cindex + 1 : ]
-				
-				self.curses_pad.addstr(bot_bar, slen, firsts, self.command_str_color)
-				slen += len(firsts)
-				self.curses_pad.addstr(bot_bar, slen, ch, self.command_hotkey_color)
-				slen += len(ch)
-				self.curses_pad.addstr(bot_bar, slen, lasts, self.command_str_color)
-				slen += len(lasts)
-			else:
-				self.curses_pad.addstr(bot_bar, 0, self.bottom_commands[0][0], self.command_str_color)
-				#self.curses_pad.addnstr(bot_bar, 0, self.commands[0][0], 4, self.parent.theme_manager.findPair(self, 'HILIGHT'))
-				slen = len(self.bottom_commands[0][0])
-		if len(self.bottom_commands) > 1:
-			
-			for hotkeystr, cindex in self.bottom_commands[1:]:
-				if cindex is not None:
-					firsts = '   {}'.format(hotkeystr[ : cindex])
-					ch = hotkeystr[cindex]
-					lasts = '{}'.format(hotkeystr[cindex + 1 : ])
-					
-					self.curses_pad.addstr(bot_bar, slen, firsts, self.command_str_color)
-					slen += len(firsts)
-					#self.curses_pad.addnstr(bot_bar, slen, ch, len(ch), curses.A_STANDOUT | self.parent.theme_manager.findPair(self, 'HILIGHT'))
-					self.curses_pad.addstr(bot_bar, slen, ch, self.command_hotkey_color)
-					slen += len(ch)
-					self.curses_pad.addstr(bot_bar, slen, lasts, self.command_str_color)
-					slen += len(lasts)
-				else:
-					newc = '  {}'.format(hotkeystr)
-					self.curses_pad.addstr(bot_bar, slen, newc, self.command_str_color)
-					slen += len(newc)
-'''
 class WalletGenieImportError(Exception):
 	def __init__(self, message):
 		super(WalletGenieImportError, self).__init__(message)

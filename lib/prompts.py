@@ -230,17 +230,6 @@ class ChoicePopup(MinimalActionFormV2WithMenus):
 class NullWidgetClass(npyscreen.widget.Widget):
 	pass
 
-# implement a form which:
-#	* allows static placement of Hotkey items
-#		> hotkeys switch between inner forms
-#	* allows a top and bottom bar similar to MuttForm
-#	
-#	* implements functionality to:
-#		> display an inner form that:
-#			- has many of its own widgets
-#			- inherits the handlers (switches between inner form)
-#		
-
 class InnerPluginViewForm(npyscreen.FormBaseNew):
 	BLANK_COLUMNS_RIGHT = 2
 	BLANK_COLUMNS_LEFT = 2
@@ -251,8 +240,6 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	BLANK_COLUMNS_RIGHT = 0
 	DEFAULT_X_OFFSET = 2
 	FRAMED = False
-	#MAIN_WIDGET_CLASS = npyscreen.MultiLine
-	#MAIN_WIDGET_CLASS = npyscreen.SimpleGrid
 	MAIN_WIDGET_CLASSES = [npyscreen.MultiLine]
 	MAIN_WIDGET_CLASS_START_LINE = 1
 	STATUS_WIDGET_CLASS = npyscreen.Textfield
@@ -261,11 +248,8 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	COMMAND_WIDGET_NAME = None
 	COMMAND_WIDGET_BEGIN_ENTRY_AT = None
 	COMMAND_ALLOW_OVERRIDE_BEGIN_ENTRY_AT = True
-	#MAIN_WIDGET_CLASS = grid.SimpleGrid
-	#MAIN_WIDGET_CLASS = editmultiline.MultiLineEdit
 	
 	bottom_commands = []
-	
 	
 	def __init__(self, cycle_widgets=True, *args, **keywords):
 		super(PluginViewForm, self).__init__(cycle_widgets=cycle_widgets, *args, **keywords)
@@ -273,10 +257,9 @@ class PluginViewForm(npyscreen.FormBaseNew):
 		self.command_hotkey_color = curses.A_UNDERLINE | curses.A_BOLD | curses.color_pair(curses.COLOR_MAGENTA)
 	
 	def draw_form(self):
-		MAXY, MAXX = self.lines, self.columns #self.curses_pad.getmaxyx()
+		MAXY, MAXX = self.lines, self.columns
 		self.curses_pad.hline(0, 0, curses.ACS_HLINE, MAXX - 1)  
 		self.curses_pad.hline(
-			#MAXY - 2 - self.BLANK_LINES_BASE, 0, 
 			MAXY - 1, 0, 
 			curses.ACS_HLINE, MAXX - 1
 		)  
@@ -286,11 +269,17 @@ class PluginViewForm(npyscreen.FormBaseNew):
 		bot_bar = MAXY - 2 - self.BLANK_LINES_BASE
 		
 		def mkcmdstr(s, i, slen, isfirst=False):
-			firsts = s[ : i]
+			if type(i) is list:
+				firsts = s[ : i[0]]
+				ch = s[i[0] : i[1] + 1]
+				lasts = s[i[1] + 1 : ]
+			else:
+				firsts = s[ : i]
+				ch = s[i]
+				lasts = s[i + 1 : ]
+			
 			if not isfirst:
 				firsts = '  {}'.format(firsts)
-			ch = s[i]
-			lasts = s[i + 1 : ]
 			
 			self.curses_pad.addstr(bot_bar, slen, firsts, self.command_str_color)
 			slen += len(firsts)
@@ -320,9 +309,6 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	def add_widget(self, *args, **kwargs):
 		self.wMainWidgets.append(self.add(*args, **kwargs))
 	
-	'''def register_widget_form(self, hotkey, formtype, *fargs, **fkwargs):
-		self.add_handlers({hotkey: })'''
-	
 	def create(self):
 		MAXY, MAXX = self.lines, self.columns
 		self.wStatus1 = self.add(
@@ -342,9 +328,6 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	
 	def while_editing(self, *args, **kwargs):
 		super(PluginViewForm, self).while_editing(*args, **kwargs)
-		#for w in self.wMainWidgets:
-		#	#if not w.hidden:
-		#	w.display()
 	
 	def h_display(self, input):
 		super(PluginViewForm, self).h_display(input)
@@ -357,4 +340,3 @@ class PluginViewForm(npyscreen.FormBaseNew):
 		super(PluginViewForm, self).resize()
 		MAXY, MAXX = self.lines, self.columns
 		self.wStatus2.rely = MAXY - 2 - self.BLANK_LINES_BASE
-		#self.wCommand.rely = MAXY - 1 - self.BLANK_LINES_BASE

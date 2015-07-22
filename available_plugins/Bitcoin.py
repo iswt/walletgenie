@@ -17,11 +17,8 @@ import decimal
 
 from wgplugins.WGPlugins import PluginForm
 class PeerViewForm(PluginForm, npyscreen.FormMutt):
-#class PeerViewForm(PluginFormMutt):
-	
 	def create(self):
 		super(PeerViewForm, self).create()
-		#self.wStatus1.value = 'Bitcoin'
 
 class WalletViewForm(PluginForm, npyscreen.ActionFormV2):
 	pass
@@ -82,11 +79,21 @@ class Bitcoin(DefaultPluginForm):
 	
 	def create(self):
 		super(Bitcoin, self).create()
-		#self.bottom_commands = [('Wallet', 0), ('Peers', 0)]
-		self.bottom_commands = [('Foo', 0), ('Bar', 0), ('Baz', 0)]
+		#self.bottom_commands = [('Wallet', 0), ('Peers', 0), ('Quit', 0)]
 		
-		self.register_form_func('p', self.on_peer_view)
-		self.register_form_func('w', self.on_wallet_view)
+		self.wStatus1.value = 'Bitcoin Plugin'
+		
+		'''self.register_form_funcs({
+			'w': {'callback': self.on_wallet_view, 'default': True},
+			'p': {'callback': self.on_peer_view}
+		})'''
+		
+		self.register_form_func('p', self.on_peer_view, ('Peers', 0))
+		self.register_form_func('w', self.on_wallet_view, ('Wallet', 0))
+		
+		self.set_default_form('w')
+		
+		self.bottom_commands = [('Wallet', 0), ('Peers', 0), ('^Quit', [0,1])]
 		
 		#self.wStatus1.value = ' | Bitcoin plugin'
 		#self.wStatus1.value = 'My test app'
@@ -105,7 +112,6 @@ class Bitcoin(DefaultPluginForm):
 	
 	def on_peer_view(self):
 		f =PeerViewForm()
-		f.wStatus1.value = 'Bitcoin form'
 		return f
 	
 	def on_wallet_view(self):
