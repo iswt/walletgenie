@@ -1,4 +1,5 @@
 import npyscreen
+import curses
 
 class ChoiceOptionPrompt(npyscreen.ActionFormV2):
 	#OK_BUTTON_BR_OFFSET = (2, 10)
@@ -225,3 +226,135 @@ class ChoicePopup(MinimalActionFormV2WithMenus):
 			self.select.value = [0] # just set the first item to be selected
 			self.display() # refresh the widget so the value appears to be selected (otherwise it will be selected, it will just be invisible to the user)
 			return True
+
+class NullWidgetClass(npyscreen.widget.Widget):
+	pass
+
+# implement a form which:
+#	* allows static placement of Hotkey items
+#		> hotkeys switch between inner forms
+#	* allows a top and bottom bar similar to MuttForm
+#	
+#	* implements functionality to:
+#		> display an inner form that:
+#			- has many of its own widgets
+#			- inherits the handlers (switches between inner form)
+#		
+
+class InnerPluginViewForm(npyscreen.FormBaseNew):
+	BLANK_COLUMNS_RIGHT = 2
+	BLANK_COLUMNS_LEFT = 2
+	DEFAULT_X_OFFSET = 3
+
+class PluginViewForm(npyscreen.FormBaseNew):
+	BLANK_LINES_BASE = 0 
+	BLANK_COLUMNS_RIGHT = 0
+	DEFAULT_X_OFFSET = 2
+	FRAMED = False
+	#MAIN_WIDGET_CLASS = npyscreen.MultiLine
+	#MAIN_WIDGET_CLASS = npyscreen.SimpleGrid
+	MAIN_WIDGET_CLASSES = [npyscreen.MultiLine]
+	MAIN_WIDGET_CLASS_START_LINE = 1
+	STATUS_WIDGET_CLASS = npyscreen.Textfield
+	STATUS_WIDGET_X_OFFSET = 0
+	COMMAND_WIDGET_CLASS= npyscreen.Textfield
+	COMMAND_WIDGET_NAME = None
+	COMMAND_WIDGET_BEGIN_ENTRY_AT = None
+	COMMAND_ALLOW_OVERRIDE_BEGIN_ENTRY_AT = True
+	#MAIN_WIDGET_CLASS = grid.SimpleGrid
+	#MAIN_WIDGET_CLASS = editmultiline.MultiLineEdit
+	
+	bottom_commands = []
+	
+	
+	def __init__(self, cycle_widgets=True, *args, **keywords):
+		super(PluginViewForm, self).__init__(cycle_widgets=cycle_widgets, *args, **keywords)
+		self.command_str_color = curses.A_BOLD
+		self.command_hotkey_color = curses.A_UNDERLINE | curses.A_BOLD | curses.color_pair(curses.COLOR_MAGENTA)
+	
+	def draw_form(self):
+		MAXY, MAXX = self.lines, self.columns #self.curses_pad.getmaxyx()
+		self.curses_pad.hline(0, 0, curses.ACS_HLINE, MAXX - 1)  
+		self.curses_pad.hline(
+			#MAXY - 2 - self.BLANK_LINES_BASE, 0, 
+			MAXY - 1, 0, 
+			curses.ACS_HLINE, MAXX - 1
+		)  
+		
+		slen = 0
+		#top_bar = 
+		bot_bar = MAXY - 2 - self.BLANK_LINES_BASE
+		
+		def mkcmdstr(s, i, slen, isfirst=False):
+			firsts = s[ : i]
+			if not isfirst:
+				firsts = '  {}'.format(firsts)
+			ch = s[i]
+			lasts = s[i + 1 : ]
+			
+			self.curses_pad.addstr(bot_bar, slen, firsts, self.command_str_color)
+			slen += len(firsts)
+			self.curses_pad.addstr(bot_bar, slen, ch, self.command_hotkey_color)
+			slen += len(ch)
+			self.curses_pad.addstr(bot_bar, slen, lasts, self.command_str_color)
+			slen += len(lasts)
+			return slen
+		
+		if self.bottom_commands:
+			if self.bottom_commands[0][1] is not None:
+				slen = mkcmdstr(
+					self.bottom_commands[0][0], self.bottom_commands[0][1],
+					slen, isfirst=True
+				)
+			else:
+				self.curses_pad.addstr(bot_bar, 0, self.bottom_commands[0][0], self.command_str_color)
+		if len(self.bottom_commands) > 1:
+			for hotkeystr, cindex in self.bottom_commands[1:]:
+				if cindex is not None:
+					slen = mkcmdstr(hotkeystr, cindex, slen)
+				else:
+					newc = '  {}'.format(hotkeystr)
+					self.curses_pad.addtstr(bot_bar, slen, newc, self.command_str_color)
+					slen += len(newc)
+	
+	def add_widget(self, *args, **kwargs):
+		self.wMainWidgets.append(self.add(*args, **kwargs))
+	
+	'''def register_widget_form(self, hotkey, formtype, *fargs, **fkwargs):
+		self.add_handlers({hotkey: })'''
+	
+	def create(self):
+		MAXY, MAXX = self.lines, self.columns
+		self.wStatus1 = self.add(
+			self.__class__.STATUS_WIDGET_CLASS, rely=0, 
+			relx=self.__class__.STATUS_WIDGET_X_OFFSET,
+			editable = False,  
+		)
+		
+		self.wStatus2 = self.add(
+			self.__class__.STATUS_WIDGET_CLASS, rely=MAXY - 2 - self.BLANK_LINES_BASE, 
+			relx = self.__class__.STATUS_WIDGET_X_OFFSET, editable = False,  
+		)
+		
+		self.wStatus1.important = True
+		self.wStatus2.important = True
+		self.nextrely = 2
+	
+	def while_editing(self, *args, **kwargs):
+		super(PluginViewForm, self).while_editing(*args, **kwargs)
+		#for w in self.wMainWidgets:
+		#	#if not w.hidden:
+		#	w.display()
+	
+	def h_display(self, input):
+		super(PluginViewForm, self).h_display(input)
+		if hasattr(self, 'wMainWidgets'):
+			for w in self.wMainWidgets:
+				if not w.hidden:
+					w.display()
+	
+	def resize(self):
+		super(PluginViewForm, self).resize()
+		MAXY, MAXX = self.lines, self.columns
+		self.wStatus2.rely = MAXY - 2 - self.BLANK_LINES_BASE
+		#self.wCommand.rely = MAXY - 1 - self.BLANK_LINES_BASE

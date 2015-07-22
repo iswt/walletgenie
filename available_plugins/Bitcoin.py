@@ -1,4 +1,5 @@
-from wgplugins.WGPlugins import WGPlugin, WalletGenieConfig, WalletGenieImportError
+from wgplugins.WGPlugins import WGPluginForm, WalletGenieConfig, WalletGenieImportError
+from wgplugins.WGPlugins import DefaultPluginForm, PluginForm
 from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt
 from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user
 try:
@@ -14,6 +15,17 @@ import npyscreen
 import json
 import decimal
 
+from wgplugins.WGPlugins import PluginForm
+class PeerViewForm(PluginForm, npyscreen.FormMutt):
+#class PeerViewForm(PluginFormMutt):
+	
+	def create(self):
+		super(PeerViewForm, self).create()
+		#self.wStatus1.value = 'Bitcoin'
+
+class WalletViewForm(PluginForm, npyscreen.ActionFormV2):
+	pass
+
 class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 	'''
 	wrap all _call functionality to catch JSONRPCException and print out the error
@@ -27,7 +39,10 @@ class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 			#npyscreen.notify_confirm(title='RPC Error', msg='{}'.format(msg))
 			return False
 
-class Bitcoin(WGPlugin):
+class Bitcoin(DefaultPluginForm):
+	
+	coin_name = 'Bitcoin'
+	coin_symbol = 'BTC'
 	
 	def __init__(self, *args, **kwargs):
 		super(Bitcoin, self).__init__(*args, **kwargs)
@@ -65,10 +80,49 @@ class Bitcoin(WGPlugin):
 			)
 		)
 	
+	def create(self):
+		super(Bitcoin, self).create()
+		#self.bottom_commands = [('Wallet', 0), ('Peers', 0)]
+		self.bottom_commands = [('Foo', 0), ('Bar', 0), ('Baz', 0)]
+		
+		self.register_form_func('p', self.on_peer_view)
+		self.register_form_func('w', self.on_wallet_view)
+		
+		#self.wStatus1.value = ' | Bitcoin plugin'
+		#self.wStatus1.value = 'My test app'
+		
+		#self.add(npyscreen.TitleFixedText, name='ok', value='Test')
+		#self.add_widget(npyscreen.TitleFixedText, name='ok', value='Test')
+		#self.add(npyscreen.TitleFixedText, name='ok2', value='Test2', hidden=True)
+		#self.add(npyscreen.TitleFixedText, name='ok3', value='Test3')
+		
+		#self.add_views(self, {
+		#	'w': (self.on_wallet_view, None),
+		#	'p': (self.on_peer_view, None),
+		#})
+		
+		#self.add_handlers({'c': self.activate_console})
+	
+	def on_peer_view(self):
+		f =PeerViewForm()
+		f.wStatus1.value = 'Bitcoin form'
+		return f
+	
+	def on_wallet_view(self):
+		f = WalletViewForm()
+		return f
+	
 	def show_diagnostics(self, *args):
 		outs = 'I am attempting to speak to the bitcoin network for you...\n'
 		btci = self.access.getinfo()
-		outs += '\n\nUsing my awesome powers, I am now speaking to bitcoind v{}, which is connected to {} other nodes around the world.\n\nThe last block I have seen on the blockchain is {}.\n'.format(btci['version'], btci['connections'], btci['blocks'])
+		
+		version_str = '{}.{}.{}.{}'.format(
+			btci['version'] / 1000000,
+			(btci['version'] % 1000000) / 10000,
+			(btci['version'] % 10000) / 100,
+			btci['version'] % 100
+		)
+		outs += '\n\nUsing my awesome powers, I am now speaking to bitcoind v{}, which is connected to {} other nodes around the world.\n\nThe last block I have seen on the blockchain is {}.\n'.format(version_str, btci['connections'], btci['blocks'])
 		try:
 			if btci['unlocked_until'] == 0:
 				outs += '\n\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.'

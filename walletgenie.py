@@ -48,8 +48,10 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		self.how_exited_handers[npyscreen.wgwidget.EXITED_ESCAPE] = self.exit_app
 		self.name = 'Wallet Genie v{}'.format(self._version)
 		
-		self.add(npyscreen.TitleFixedText, name=' ', value=self._welcome_msg, editable=False)
-		self.add(npyscreen.TitleFixedText, name='shortcut', value='Plugin functions', editable=False, rely=10)
+		#self.add(npyscreen.TitleFixedText, name=' ', value=self._welcome_msg, editable=False)
+		#self.add(npyscreen.TitleFixedText, name=' ', value='^X to open menu', editable=False, rely=7)
+		#self.add(npyscreen.TitleFixedText, name=' ', value='(e)nable / (c)hange plugin', editable=False, rely=9)
+		#self.add(npyscreen.TitleFixedText, name=' ', value='(q)uit', editable=False, rely=11)
 		
 		self.helper_menu = self.add_menu(name='Options', shortcut='^X')
 		self.helper_menu.addItem('Enable a Plugin (e)', self.enable_plugin, '1')
@@ -57,8 +59,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		
 		self.add_handlers({
 			'^Q': self.exit_app, 'q': self.exit_app,
-			'e': self.enable_plugin, 'c': self.switch_plugin,
-			's': self.exit_app,
+			#'e': self.enable_plugin, 'c': self.switch_plugin,
 		})
 	
 	def postInit(self):
@@ -71,7 +72,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		self.ppf = PluginPrompterForm()
 		self.ppf.select = self.ppf.add(
 			npyscreen.TitleMultiSelect, name='Select which plugins you would like to enable', 
-			values=self._available_plugins, #value=[self._available_plugins.index(x) for x in self._available_plugins],
+			values=self._available_plugins,
 			scroll_exit=True, width=1
 		)
 		self.parentApp.registerForm('PluginSelectForm', self.ppf)
@@ -114,68 +115,47 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 					else:
 						self.parentApp.switchForm('SwitchPluginForm')
 				else:
-					self.edit()
+					self.show_plugin_form(self.active_plugin)
 	
-	def add_plugin_widgets(self, plugin):
+	def add_plugin_form(self, plugin):
 		if plugin not in self.loaded_plugins.keys():
 			return None
 		
-		if 'widgets' not in self.loaded_plugins[plugin].keys():
-			self.loaded_plugins[plugin]['widgets'] = []
+		# do not re-register forms
+		if self.loaded_plugins[plugin]['plugin_class'].coin_name in self.parentApp._Forms:
+			return None
 		
-		for i, (shortcut, menud) in enumerate(sorted(self.loaded_plugins[plugin]['plugin_class'].main_menu.items())):
-			if i == 0:
-				self.loaded_plugins[plugin]['widgets'].append(
-					self.add(npyscreen.TitleFixedText, name=shortcut, value=menud['description'], editable=False, rely=12)
-				)
-			else:
-				self.loaded_plugins[plugin]['widgets'].append(
-					self.add(npyscreen.TitleFixedText, name=shortcut, value=menud['description'], editable=False)
-				)
-			# try to add the shortcut to the main form
-			# don't overwrite existing handlers (shapeshift etc.)
-			if shortcut not in self.handlers.keys():
-				self.add_handlers({shortcut: menud['callback']})
+		self.parentApp.registerForm(
+			self.loaded_plugins[plugin]['plugin_class'].coin_name, 
+			self.loaded_plugins[plugin]['plugin_class'].get_form()
+		)
 	
-	def remove_plugin_widgets(self, plugin):
+	def remove_plugin_form(self, plugin):
 		if plugin not in self.loaded_plugins.keys():
 			return None
 		
-		if 'widgets' not in self.loaded_plugins[plugin] or not self.loaded_plugins[plugin]['widgets']:
+		cn = self.loaded_plugins[plugin]['plugin_class'].coin_name
+		
+		if cn not in self.parentApp._Forms:
 			return None
 		
-		#for w in self.loaded_plugins[plugin]['widgets']:
-		#	self.remove(w)
+		self.parentApp.removeForm(cn)
 		
-		for i, (shortcut, menud) in enumerate(sorted(self.loaded_plugins[plugin]['plugin_class'].main_menu.items())):
-			if shortcut in self.handlers.keys():
-				del self.handlers[shortcut]
-		
-	def show_plugin_widgets(self, plugin, show_widgets=True):
-		'''
-		show / hide individual plugin main menu
-		this also removes the handlers associated
-		'''
+	def show_plugin_form(self, plugin):
 		if plugin not in self.loaded_plugins.keys():
 			return None
-		if 'widgets' not in self.loaded_plugins[plugin] or not self.loaded_plugins[plugin]['widgets']:
+		
+		cn = self.loaded_plugins[plugin]['plugin_class'].coin_name
+		if cn not in self.parentApp._Forms:
 			return None
 		
-		for w in self.loaded_plugins[plugin]['widgets']:
-			w.hidden = not show_widgets
+		self.parentApp.switchForm(cn)
 		
-		for i, (shortcut, menud) in enumerate(sorted(self.loaded_plugins[plugin]['plugin_class'].main_menu.items())):
-			if show_widgets:
-				if shortcut not in self.handlers.keys():
-					self.add_handlers({shortcut: menud['callback']})
-			else:
-				if shortcut in self.handlers.keys():
-					del self.handlers[shortcut]
-		
-		self.display() # update 
 	
 	def onFormChange(self, lastform):
 		self.LASTFORM = lastform
+		if lastform in ['SwitchPluginForm', 'PluginSelectForm']:
+			self.parentApp.switchForm('MAIN') # make sure our activate() method is called
 	
 	def check_plugins(self):
 		self._available_plugins = self.find_plugins(plugin_dir=PLUGINS_DIR)
@@ -205,21 +185,9 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		return self.switch_active_plugin(plugin)
 	
 	def switch_active_plugin(self, plugin):
-		if plugin is None:
-			for p in self.loaded_plugins.keys():
-				self.show_plugin_widgets(p, False)
-			self.active_plugin = None
-			return True
-		
 		if plugin not in self.loaded_plugins.keys():
 			return None
 		
-		# hide all other loaded plugins and show this one
-		tohide = [x for x in self.loaded_plugins.keys() if x != plugin]
-		for p in tohide:
-			self.show_plugin_widgets(p, False)
-		
-		self.show_plugin_widgets(plugin, True)
 		self.active_plugin = plugin
 		
 		# update the enable/disable plugin and choose plugin selection dialogs
@@ -231,6 +199,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		self.switch_plugin_form.select.values = sorted(loaded_names)
 		
 		self.update_plugins()
+		self.show_plugin_form(plugin)
 	
 	def enable_plugin(self, unknown=None):
 		self.parentApp.switchForm('PluginSelectForm')
@@ -242,11 +211,14 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		
 		# instantiate the new class
 		classname = self.get_plugin_class(plugin)
-		loaded_class = getattr(loader, classname)
+		loaded_class = getattr(loader, classname, None)
+		if not loaded_class:
+			return None
 		try:
-			plug = loaded_class(self.plugins, self.loaded_plugins, self.active_plugin, self.load_plugin)
+			plug = loaded_class(self)
 			try:
-				assert plug.main_menu
+				assert callable(getattr(plug, 'get_form', None))
+				assert plug.coin_name
 			except (AttributeError, AssertionError):
 				npyscreen.notify_confirm('{} could not be initiated'.format(plugin))
 				plug.cleanup()
@@ -262,9 +234,8 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 			'plugin_class': plug
 		}
 		
-		self.add_plugin_widgets(plugin)
+		self.add_plugin_form(plugin)
 		
-		npyscreen.notify_confirm('Successfully loaded {}'.format(plugin))
 		self.update_plugins()
 		return True
 	
@@ -278,7 +249,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 		if self.active_plugin == plugin:
 			self.active_plugin = None
 		
-		self.remove_plugin_widgets(plugin)
+		self.remove_plugin_form(plugin)
 		
 		self.update_plugins()
 		return True
@@ -311,7 +282,7 @@ class WalletGenie_MainForm(MinimalActionFormV2WithMenus):
 class WalletGenieApp(npyscreen.NPSAppManaged):
 	themes = {
 		'Colorful': npyscreen.Themes.ColorfulTheme, 'Default': npyscreen.Themes.DefaultTheme,
-		'Light Transparent': npyscreen.Themes.TransparentThemeLightText, 'Dark Transparent': npyscreen.Themes.TransparentThemeDarkText
+		'LightTransparent': npyscreen.Themes.TransparentThemeLightText, 'DarkTransparent': npyscreen.Themes.TransparentThemeDarkText
 	}
 	def onStart(self):
 		npyscreen.setTheme(self.themes['Default'])
