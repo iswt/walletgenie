@@ -101,14 +101,24 @@ class DefaultPluginForm(WGPluginForm, PluginViewForm):
 			
 			f = func()
 			f.add_handlers(self.handlers)
-			f.handlers.update({'^Q': self.exit_all_forms})
+			f.handlers.update({'^Q': self.exit_all_forms, 'q': self.exit_all_forms})
 			
 			self.current_forms[hotkey] = f
 			f.edit()
 		
 		self.add_handlers({hotkey: lambda x: callfunc(func)})
-		if bot_disp_tup not in self.bottom_commands:
+		if bot_disp_tup and bot_disp_tup not in self.bottom_commands:
 			self.bottom_commands.append(bot_disp_tup)
+			self.bottom_commands = sorted(self.bottom_commands)
+	
+	def register_display_func(self, hotkey, func, cmd_tup):
+		def callfunc(func):
+			func()
+			self.display() # make sure the outer plugin form gets updated (it might get drawn over during func())
+		
+		self.add_handlers({hotkey: lambda x: callfunc(func)})
+		if cmd_tup and cmd_tup not in self.bottom_commands:
+			self.bottom_commands.append(cmd_tup)
 			self.bottom_commands = sorted(self.bottom_commands)
 	
 	def exit_all_forms(self, *args):
@@ -123,25 +133,6 @@ class DefaultPluginForm(WGPluginForm, PluginViewForm):
 		else:
 			self.edit()
 	
-	'''def register_form_funcs(self, hkd):
-		def callfunc(func):
-			f = func()
-			#f.add_handlers(self.handlers)
-			f.edit()
-			
-		for k, v in hkd.items():
-			isdefault = False
-			if type(v) is dict:
-				#npyscreen.notify_confirm('{}'.format(v))
-				self.add_handlers({k: lambda x: callfunc(v['callback'])})
-				if 'default' in v:
-					isdefault = v['default']
-			else:
-				npyscreen.notify_confirm('{}'.format(v))
-				self.add_handlers({k: lambda x: callfunc(v)})
-			if isdefault:
-				self.set_default_form(k)
-	'''
 	def switch_form_by_hotkey(self, hotkey):
 		if hotkey not in self.handlers:
 			return None

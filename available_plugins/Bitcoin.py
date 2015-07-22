@@ -20,9 +20,38 @@ class PeerViewForm(PluginForm, npyscreen.FormMutt):
 	def create(self):
 		super(PeerViewForm, self).create()
 
-class WalletViewForm(PluginForm, npyscreen.ActionFormV2):
-	pass
+class WalletViewForm(PluginForm, npyscreen.ActionFormMinimal):
+	def create(self):
+		super(WalletViewForm, self).create()
+		
+		self.balance = self.add(npyscreen.TitleFixedText, name='Balance:', value='0 BTC', editable=False)
+		
+		self.past_tx_disp = self.add(
+			npyscreen.MultiLine, name='\nTransactions:', rely=4,
+			values=[], editable=False, 
+		)
+	
+	def update_balance(self, s):
+		self.balance.value = s
+		self.display()
 
+class DiagnosticViewForm(PluginForm, npyscreen.ActionFormMinimal):
+	
+	def __init__(self, *args, **kwargs):
+		super(DiagnosticViewForm, self).__init__(*args, **kwargs)
+	
+	def create(self):
+		super(DiagnosticViewForm, self).create()
+		self.add(npyscreen.TitleFixedText, name='Diagnostics', value=' ', editable=False, color='LABEL')
+		self.diagnostics = self.add(
+			npyscreen.TitlePager, name=' ',
+			values=[' ']
+		)
+	
+	def update_diagnostics(self, news):
+		l = [s + '\n' for s in news.split('\n')]
+		self.diagnostics.values = [w.replace('\n', ' ') for w in l]
+		
 class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 	'''
 	wrap all _call functionality to catch JSONRPCException and print out the error
@@ -49,15 +78,6 @@ class Bitcoin(DefaultPluginForm):
 			'rpcpassword': None,
 			'rpcuser': 'rpc', 'rpcssl': '0',
 			'rpcport': '8332', 'rpcurl': '127.0.0.1'
-		}
-		
-		self.main_menu = {
-			'1': {'description': 'Show Network Diagnostics', 'callback': self.show_diagnostics},
-			'2': {'description': 'Show Bitcoin Balance', 'callback': self.show_balance},
-			'3': {'description': 'Sign a message', 'callback': self._prompt_sign_message},
-			'4': {'description': 'Verify a signed message', 'callback': self._prompt_verify_message},
-			'5': {'description': 'Import a new private key', 'callback': self._prompt_import_privkey},
-			'6': {'description': 'Import a new watch-only address', 'callback': self._prompt_import_watch_address},
 		}
 		
 		wgc = WalletGenieConfig()
@@ -88,58 +108,50 @@ class Bitcoin(DefaultPluginForm):
 			'p': {'callback': self.on_peer_view}
 		})'''
 		
+		#self.register_display_func('d', self.show_diagnostics, ('Diagnostics', 0))
+		
+		self.register_form_func('d', self.on_diagnostics_view, ('Diagnostics', 0))
 		self.register_form_func('p', self.on_peer_view, ('Peers', 0))
 		self.register_form_func('w', self.on_wallet_view, ('Wallet', 0))
 		
 		self.set_default_form('w')
 		
-		self.bottom_commands = [('Wallet', 0), ('Peers', 0), ('^Quit', [0,1])]
-		
-		#self.wStatus1.value = ' | Bitcoin plugin'
-		#self.wStatus1.value = 'My test app'
-		
-		#self.add(npyscreen.TitleFixedText, name='ok', value='Test')
-		#self.add_widget(npyscreen.TitleFixedText, name='ok', value='Test')
-		#self.add(npyscreen.TitleFixedText, name='ok2', value='Test2', hidden=True)
-		#self.add(npyscreen.TitleFixedText, name='ok3', value='Test3')
-		
-		#self.add_views(self, {
-		#	'w': (self.on_wallet_view, None),
-		#	'p': (self.on_peer_view, None),
-		#})
-		
-		#self.add_handlers({'c': self.activate_console})
+		self.bottom_commands = [
+			('Wallet', 0), ('Peers', 0), 
+			('Diagnostics', 0), ('^Quit', [0,1])
+		]
 	
 	def on_peer_view(self):
-		f =PeerViewForm()
+		f = PeerViewForm()
 		return f
 	
 	def on_wallet_view(self):
 		f = WalletViewForm()
+		f.balance.value = '{} BTC'.format(self.from_satoshis(self.access.getbalance()))
 		return f
 	
-	def show_diagnostics(self, *args):
-		outs = 'I am attempting to speak to the bitcoin network for you...\n'
-		btci = self.access.getinfo()
+	def on_diagnostics_view(self):
+		f = DiagnosticViewForm()
 		
-		version_str = '{}.{}.{}.{}'.format(
-			btci['version'] / 1000000,
-			(btci['version'] % 1000000) / 10000,
-			(btci['version'] % 10000) / 100,
-			btci['version'] % 100
-		)
-		outs += '\n\nUsing my awesome powers, I am now speaking to bitcoind v{}, which is connected to {} other nodes around the world.\n\nThe last block I have seen on the blockchain is {}.\n'.format(version_str, btci['connections'], btci['blocks'])
-		try:
+		btci = self.access.getinfo()
+		btcni = self.access.getnetworkinfo()
+		
+		version_str = '{}'.format(btci['version'] / 1000000)
+		s = 'I am speaking to bitcoind v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
+		s += '\nConnected to {} nodes'.format(btci['connections'])
+		s += '\n\nLast block seen on the network is {}'.format(btci['blocks'])
+		
+		if 'unlocked_until' in btci:
 			if btci['unlocked_until'] == 0:
-				outs += '\n\nYour local wallet is encrypted and locked. You will need to tell me the magic phrase for certain functions to succeed.'
+				s += '\n\nYour local wallet is encrypted and locked'
 			else:
 				timeremaining = int(btci['unlocked_until']) - int(time.time())
-				outs += '\n\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds, at which time it will fade from my memory.'.format(timeremaining)
-			self.encrypted_wallet = True
-		except KeyError as e:
-			outs += "\n\nYour local wallet is not protected by a magic phrase. Your wish is my command."
+				s += '\n\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds'.format(timeremaining)
+		else:
+			s += '\n\nYour local wallet is not protected by a magic phrase.'
 		
-		self.output(outs)
+		f.update_diagnostics(s)
+		return f
 	
 	def show_balance(self, *args):
 		self.output('You have {} BTC in your bitcoin coffers'.format(self.from_satoshis(self.access.getbalance())))
