@@ -21,6 +21,11 @@ class PeerViewForm(PluginForm, npyscreen.FormMutt):
 		super(PeerViewForm, self).create()
 
 class WalletViewForm(PluginForm, npyscreen.ActionFormMinimal):
+	def __init__(self, handlers=None, *args, **kwargs):
+		super(WalletViewForm, self).__init__(*args, **kwargs)
+		if handlers:
+			self.handlers.update(handlers)
+	
 	def create(self):
 		super(WalletViewForm, self).create()
 		
@@ -99,15 +104,12 @@ class Bitcoin(DefaultPluginForm):
 	
 	def create(self):
 		super(Bitcoin, self).create()
-		#self.bottom_commands = [('Wallet', 0), ('Peers', 0), ('Quit', 0)]
-		
 		self.wStatus1.value = 'Bitcoin Plugin'
 		
 		'''self.register_form_funcs({
 			'w': {'callback': self.on_wallet_view, 'default': True},
 			'p': {'callback': self.on_peer_view}
 		})'''
-		
 		#self.register_display_func('d', self.show_diagnostics, ('Diagnostics', 0))
 		
 		self.register_form_func('d', self.on_diagnostics_view, ('Diagnostics', 0))
@@ -126,7 +128,11 @@ class Bitcoin(DefaultPluginForm):
 		return f
 	
 	def on_wallet_view(self):
-		f = WalletViewForm()
+		def refresh_balance(f):
+			f.balance.value = '{} BTC'.format(self.from_satoshis(self.access.getbalance()))
+			f.display()
+		
+		f = WalletViewForm(handlers={'r': lambda x: refresh_balance(f)})
 		f.balance.value = '{} BTC'.format(self.from_satoshis(self.access.getbalance()))
 		return f
 	
@@ -136,7 +142,12 @@ class Bitcoin(DefaultPluginForm):
 		btci = self.access.getinfo()
 		btcni = self.access.getnetworkinfo()
 		
-		version_str = '{}'.format(btci['version'] / 1000000)
+		version_str = '{0:.0f}.{1:.0f}.{2:.0f}.{3:.0f}'.format(
+			btci['version'] / 1000000,
+			(btci['version'] % 1000000) / 10000,
+			(btci['version'] % 10000) / 100,
+			btci['version'] % 100,
+		)
 		s = 'I am speaking to bitcoind v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
 		s += '\nConnected to {} nodes'.format(btci['connections'])
 		s += '\n\nLast block seen on the network is {}'.format(btci['blocks'])
