@@ -12,51 +12,35 @@ try:
 except ImportError:
 	pass
 import npyscreen
+import curses
 import json
 import decimal
+import datetime
 
 from wgplugins.WGPlugins import PluginForm
 class PeerViewForm(PluginForm, npyscreen.FormMutt):
 	def create(self):
 		super(PeerViewForm, self).create()
 
-class WalletViewForm(PluginForm, npyscreen.ActionFormMinimal):
-	def __init__(self, handlers=None, *args, **kwargs):
-		super(WalletViewForm, self).__init__(*args, **kwargs)
-		if handlers:
-			self.handlers.update(handlers)
+class SendViewForm(PluginForm, npyscreen.ActionFormV2):
+	def __init__(self, *args, **kwargs):
+		super(SendViewForm, self).__init__(*args, **kwargs)
 	
 	def create(self):
-		super(WalletViewForm, self).create()
-		
-		self.balance = self.add(npyscreen.TitleFixedText, name='Balance:', value='0 BTC', editable=False)
-		
-		self.past_tx_disp = self.add(
-			npyscreen.MultiLine, name='\nTransactions:', rely=4,
-			values=[], editable=False, 
-		)
+		super(SendViewForm, self).create()
 	
-	def update_balance(self, s):
-		self.balance.value = s
-		self.display()
+	def draw_form(self):
+		super(SendViewForm, self).draw_form()
+		
 
-class DiagnosticViewForm(PluginForm, npyscreen.ActionFormMinimal):
+class ReceiveViewForm(PluginForm, npyscreen.ActionFormV2):
 	
 	def __init__(self, *args, **kwargs):
-		super(DiagnosticViewForm, self).__init__(*args, **kwargs)
+		super(ReceiveViewForm, self).__init__(*args, **kwargs)
 	
 	def create(self):
-		super(DiagnosticViewForm, self).create()
-		self.add(npyscreen.TitleFixedText, name='Diagnostics', value=' ', editable=False, color='LABEL')
-		self.diagnostics = self.add(
-			npyscreen.TitlePager, name=' ',
-			values=[' ']
-		)
-	
-	def update_diagnostics(self, news):
-		l = [s + '\n' for s in news.split('\n')]
-		self.diagnostics.values = [w.replace('\n', ' ') for w in l]
-		
+		super(ReceiveViewForm, self).create()
+
 class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 	'''
 	wrap all _call functionality to catch JSONRPCException and print out the error
@@ -101,67 +85,86 @@ class Bitcoin(DefaultPluginForm):
 				'https' if int(self.rpcd['rpcssl']) else 'http', self.rpcd['rpcuser'], self.rpcd['rpcpassword'], self.rpcd['rpcurl'], self.rpcd['rpcport']
 			)
 		)
-	
-	def create(self):
-		super(Bitcoin, self).create()
-		self.wStatus1.value = 'Bitcoin Plugin'
-		
-		'''self.register_form_funcs({
-			'w': {'callback': self.on_wallet_view, 'default': True},
-			'p': {'callback': self.on_peer_view}
-		})'''
-		#self.register_display_func('d', self.show_diagnostics, ('Diagnostics', 0))
-		
-		self.register_form_func('d', self.on_diagnostics_view, ('Diagnostics', 0))
-		self.register_form_func('p', self.on_peer_view, ('Peers', 0))
-		self.register_form_func('w', self.on_wallet_view, ('Wallet', 0))
-		
-		self.set_default_form('w')
-		
-		self.bottom_commands = [
-			('Wallet', 0), ('Peers', 0), 
-			('Diagnostics', 0), ('^Quit', [0,1])
-		]
-	
-	def on_peer_view(self):
-		f = PeerViewForm()
-		return f
-	
-	def on_wallet_view(self):
-		def refresh_balance(f):
-			f.balance.value = '{} BTC'.format(self.from_satoshis(self.access.getbalance()))
-			f.display()
-		
-		f = WalletViewForm(handlers={'r': lambda x: refresh_balance(f)})
-		f.balance.value = '{} BTC'.format(self.from_satoshis(self.access.getbalance()))
-		return f
-	
-	def on_diagnostics_view(self):
-		f = DiagnosticViewForm()
-		
 		btci = self.access.getinfo()
 		btcni = self.access.getnetworkinfo()
-		
+		if not btci or not btcni:
+			raise WalletGenieConfigurationError('Could not initiate Bitcoin with the provided credentials')
 		version_str = '{0:.0f}.{1:.0f}.{2:.0f}.{3:.0f}'.format(
 			btci['version'] / 1000000,
 			(btci['version'] % 1000000) / 10000,
 			(btci['version'] % 10000) / 100,
 			btci['version'] % 100,
 		)
-		s = 'I am speaking to bitcoind v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
-		s += '\nConnected to {} nodes'.format(btci['connections'])
-		s += '\n\nLast block seen on the network is {}'.format(btci['blocks'])
+		self.wStatus1.value = 'Bitcoin v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
 		
-		if 'unlocked_until' in btci:
-			if btci['unlocked_until'] == 0:
-				s += '\n\nYour local wallet is encrypted and locked'
-			else:
-				timeremaining = int(btci['unlocked_until']) - int(time.time())
-				s += '\n\nYour local wallet is encrypted, but I still remember your magic phrase for the next {} seconds'.format(timeremaining)
-		else:
-			s += '\n\nYour local wallet is not protected by a magic phrase.'
+		# common background widget values
+		self.nodecount = btci['connections']
+		self.balance = self.from_satoshis(self.access.getbalance())
+		self.unconfirmed_balance = None
 		
-		f.update_diagnostics(s)
+		txs = self.access.listtransactions()
+		#npyscreen.notify_confirm('{}'.format(txs))
+		for tx in txs:
+			whichway = '=>'
+			if tx['category'] == 'receive':
+				whichway = '<='
+			addy = tx['address']
+			self.latest_tx_widget.values.append('[{}]    {}          {} {} {}'.format(
+				tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
+				str(tx['amount']), whichway, addy
+			))
+		
+		addybal = self.get_wallet_addresses(allow_empty=True, return_balances=True)
+		for addy, bal in addybal:
+			self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
+	
+	def create(self):
+		'''
+		Classes inheriting from DefaultPluginForm MUST have at least one editable widget on the form
+		'''
+		super(Bitcoin, self).create()
+		
+		self.add(npyscreen.FixedText, value='Latest Transactions', rely=6)
+		self.latest_tx_widget = self.add(npyscreen.MultiLine, name='Latest Transactions', values=[], rely=8, max_height=5)
+		
+		self.add(npyscreen.FixedText, value='Addresses')
+		self.addresses_widget = self.add(npyscreen.MultiLine, name='Addresses', values=[], max_height=5)
+		
+		self.register_display_func('i', self._prompt_sign_message)
+		self.register_display_func('v', self._prompt_verify_message)
+		
+		self.register_form_func('s', self.on_send_view)
+		self.register_form_func('r', self.on_receive_view)
+		self.register_form_func('p', self.on_peer_view)
+		#self.set_default_form('w')
+		
+		self.bottom_commands = [
+			('Send', 0), ('Receive', 0), ('Sign', 1), ('Verify', 0), ('Peers', 0), ('^Quit', [0,1])
+		]
+	
+	def draw_form(self):
+		MAXY, MAXX = self.lines, self.columns
+		
+		self.curses_pad.addstr(2, MAXX - 10, '{} Peers'.format(self.nodecount), curses.A_BOLD)
+		
+		balance_str = 'Balance:\t{} BTC'.format(str(self.balance))
+		self.curses_pad.addstr(2, 0, balance_str, curses.A_BOLD)
+		if self.unconfirmed_balance is not None:
+			self.curses_pad.addstr(3, 0, 'Unconfirmed:    {} BTC'.format(str(self.unconfirmed_balance)))
+		#self.curses_pad.addstr(MAXY - 4 - self.BLANK_LINES_BASE, 5, 'test', curses.A_BOLD)
+		
+		super(Bitcoin, self).draw_form()
+	
+	def on_peer_view(self):
+		f = PeerViewForm()
+		return f
+	
+	def on_send_view(self):
+		f = SendViewForm()
+		return f
+	
+	def on_receive_view(self):
+		f = ReceiveViewForm()
 		return f
 	
 	def show_balance(self, *args):

@@ -94,7 +94,7 @@ class DefaultPluginForm(WGPluginForm, PluginViewForm):
 	def __init__(self, *args, **kwargs):
 		super(DefaultPluginForm, self).__init__(*args, **kwargs)
 	
-	def register_form_func(self, hotkey, func, bot_disp_tup):
+	def register_form_func(self, hotkey, func, bot_disp_tup=None):
 		def callfunc(func):
 			self.exit_all_forms(None)
 			self.want_forms = True
@@ -111,7 +111,7 @@ class DefaultPluginForm(WGPluginForm, PluginViewForm):
 			self.bottom_commands.append(bot_disp_tup)
 			self.bottom_commands = sorted(self.bottom_commands)
 	
-	def register_display_func(self, hotkey, func, cmd_tup):
+	def register_display_func(self, hotkey, func, cmd_tup=None):
 		def callfunc(func):
 			func()
 			self.display() # make sure the outer plugin form gets updated (it might get drawn over during func())
@@ -145,11 +145,7 @@ class DefaultPluginForm(WGPluginForm, PluginViewForm):
 	
 	def create(self):
 		super(DefaultPluginForm, self).create()
-		#note: setting all of these widgets to not be editable will result in an exception being thrown
-		self.add(npyscreen.TitleFixedText, name=' ', value='Welcome to the WalletGenie Bitcoin plugin', editable=False)
-		self.add(npyscreen.TitleFixedText, name='[^]Q', value='Quit', rely=5)
-		self.add(npyscreen.TitleFixedText, name='^X', value='Options')
-		
+		#note: having no editable widget on the form will result in an exception being thrown		
 
 class PluginForm(object):
 	SHOW_ATY = 2
