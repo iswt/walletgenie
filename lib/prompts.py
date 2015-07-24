@@ -243,7 +243,7 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	MAIN_WIDGET_CLASSES = [npyscreen.MultiLine]
 	MAIN_WIDGET_CLASS_START_LINE = 1
 	STATUS_WIDGET_CLASS = npyscreen.Textfield
-	STATUS_WIDGET_X_OFFSET = 0
+	STATUS_WIDGET_X_OFFSET = 1
 	COMMAND_WIDGET_CLASS= npyscreen.Textfield
 	COMMAND_WIDGET_NAME = None
 	COMMAND_WIDGET_BEGIN_ENTRY_AT = None
@@ -254,7 +254,7 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	def __init__(self, cycle_widgets=True, *args, **keywords):
 		super(PluginViewForm, self).__init__(cycle_widgets=cycle_widgets, *args, **keywords)
 		self.command_str_color = curses.A_BOLD
-		self.command_hotkey_color = curses.A_UNDERLINE | curses.A_BOLD | curses.color_pair(curses.COLOR_MAGENTA)
+		self.command_hotkey_color = curses.A_UNDERLINE | curses.A_BOLD | self.parent.theme_manager.findPair(self, 'LABEL')
 	
 	def draw_form(self):
 		MAXY, MAXX = self.lines, self.columns
@@ -264,7 +264,7 @@ class PluginViewForm(npyscreen.FormBaseNew):
 			curses.ACS_HLINE, MAXX - 1
 		)  
 		
-		slen = 0
+		slen = 1
 		#top_bar = 
 		bot_bar = MAXY - 2 - self.BLANK_LINES_BASE
 		

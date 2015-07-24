@@ -51,3 +51,10 @@ def get_address_by_netki_wallet(wallet, coin, printerrors=True):
 			return output['wallet_address']
 	else:
 		return None
+
+def make_human_readable(num):
+	for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+		if abs(num) < 1024.0:
+			return '{:.1f} {}B'.format(num, unit)
+		num /= 1024.0
+	return '{:.1f} YiB'.format(num)

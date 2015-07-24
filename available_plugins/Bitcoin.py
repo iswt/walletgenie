@@ -1,7 +1,7 @@
 from wgplugins.WGPlugins import WGPluginForm, WalletGenieConfig, WalletGenieImportError
 from wgplugins.WGPlugins import DefaultPluginForm, PluginForm
 from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt
-from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user
+from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user, make_human_readable
 try:
 	from bitcoin.core import b2x, b2lx
 	import bitcoin.rpc
@@ -93,9 +93,9 @@ class Bitcoin(DefaultPluginForm):
 			btci['version'] / 1000000,
 			(btci['version'] % 1000000) / 10000,
 			(btci['version'] % 10000) / 100,
-			btci['version'] % 100,
+			btci['version'] % 100
 		)
-		self.wStatus1.value = 'Bitcoin v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
+		self.wStatus1.value = 'Bitcoind v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
 		
 		# common background widget values
 		self.nodecount = btci['connections']
@@ -103,21 +103,40 @@ class Bitcoin(DefaultPluginForm):
 		self.unconfirmed_balance = None
 		
 		txs = self.access.listtransactions()
-		#npyscreen.notify_confirm('{}'.format(txs))
-		for tx in txs:
+		for tx in reversed(txs):
 			whichway = '=>'
 			if tx['category'] == 'receive':
 				whichway = '<='
-			if 'address' in tx: # move operations do not have the address field
+			if 'address' in tx: # move operations do not have the address, txid or block fields
 				addy = tx['address']
-				self.latest_tx_widget.values.append('[{}]    {}          {} {} {}'.format(
+				self.latest_tx_widget.values.append('[{}]    {}          {} BTC {} {}'.format(
 					tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
 					str(tx['amount']), whichway, addy
 				))
 		
-		addybal = self.get_wallet_addresses(allow_empty=True, return_balances=True)
-		for addy, bal in addybal:
+		addybal = self.get_wallet_addresses(allow_empty=False, return_balances=True)
+		for addy, bal in sorted(addybal, key=lambda x: x[1]):
 			self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
+		
+		rmpi = self.access.getrawmempool()
+		rpi = self.access.getmempoolinfo()
+		
+		self.latest_mempool_widget.name = 'Mempool / {} txs / {}'.format(rpi['size'], make_human_readable(rpi['bytes']))
+		
+		rawt = self.access._batch(
+			[
+				{'method': 'getrawtransaction', 'version': '1.1',
+				'params': [b2lx(tx), 1], 'id': str(i)} for i, tx in enumerate(rmpi if len(rmpi) <= 10 else rmpi[: 25])
+			]
+		)
+		self.latest_mempool_widget.values = []
+		for d in rawt:
+			val = decimal.Decimal('0.0')
+			for vo in d['result']['vout']:
+				val += vo['value']
+			tx = d['result']['txid']
+			
+			self.latest_mempool_widget.values.append('{:>12} BTC   {}'.format(val, tx))
 	
 	def create(self):
 		'''
@@ -125,11 +144,24 @@ class Bitcoin(DefaultPluginForm):
 		'''
 		super(Bitcoin, self).create()
 		
-		self.add(npyscreen.FixedText, value='Latest Transactions', rely=6)
-		self.latest_tx_widget = self.add(npyscreen.MultiLine, name='Latest Transactions', values=[], rely=8, max_height=5)
+		addy_max_width = 58 # 34 + 4 + 20
+		if self.columns / 2 < addy_max_width:
+			addy_max_width = int(self.columns / 2) - 5
+		self.addresses_widget = self.add(
+			npyscreen.BoxTitle, name='Addresses', values=[], rely=4,
+			max_height=int(self.lines / 3), max_width=addy_max_width, wrap=True, scroll_exit=True
+		)
 		
-		self.add(npyscreen.FixedText, value='Addresses')
-		self.addresses_widget = self.add(npyscreen.MultiLine, name='Addresses', values=[], max_height=5)
+		self.latest_mempool_widget = self.add(
+			npyscreen.BoxTitle, name='Mempool', values=['test'], scroll_exit=True,
+			relx=int(self.columns / 2), rely=4,
+			max_width=int(self.columns / 2) - 1, max_height=int(self.lines / 3)
+		)
+		
+		self.latest_tx_widget = self.add(
+			npyscreen.BoxTitle, name='Latest Transactions', values=[],
+			scroll_exit=True, max_height=int(self.lines / 2)
+		)
 		
 		self.register_display_func('i', self._prompt_sign_message)
 		self.register_display_func('v', self._prompt_verify_message)
@@ -146,13 +178,19 @@ class Bitcoin(DefaultPluginForm):
 	def draw_form(self):
 		MAXY, MAXX = self.lines, self.columns
 		
-		self.curses_pad.addstr(2, MAXX - 10, '{} Peers'.format(self.nodecount), curses.A_BOLD)
+		peerstr = '{}'.format(self.nodecount)
+		count_color = 'GOOD' if self.nodecount >= 8 else 'WARNING'
+		self.curses_pad.addstr(2, int(self.columns / 2), peerstr, curses.A_BOLD | self.parent.theme_manager.findPair(self, count_color))
+		self.curses_pad.addstr(2, int(self.columns / 2) + len(peerstr), ' Peers'.format(self.nodecount))
 		
-		balance_str = 'Balance:\t{} BTC'.format(str(self.balance))
-		self.curses_pad.addstr(2, 0, balance_str, curses.A_BOLD)
+		balance_str1 = 'Balance:    '
+		self.curses_pad.addstr(2, 2, balance_str1)
+		balance_str2 = '{} BTC'.format(str(self.balance))
+		self.curses_pad.addstr(2, 2 + len(balance_str1), balance_str2, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOOD'))
 		if self.unconfirmed_balance is not None:
-			self.curses_pad.addstr(3, 0, 'Unconfirmed:    {} BTC'.format(str(self.unconfirmed_balance)))
-		#self.curses_pad.addstr(MAXY - 4 - self.BLANK_LINES_BASE, 5, 'test', curses.A_BOLD)
+			balance_str = balance_str1 + balance_str2
+			self.curses_pad.addstr(2, 2 + len(balance_str), ' / ', curses.A_BOLD)
+			self.curses_pad.addstr(2, 4 + len(balance_str), ' {} BTC'.format(self.unconfirmed_balance), curses.A_BOLD | self.parent.theme_manager.findPair(self, 'WARNING'))
 		
 		super(Bitcoin, self).draw_form()
 	
