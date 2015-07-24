@@ -108,11 +108,12 @@ class Bitcoin(DefaultPluginForm):
 			whichway = '=>'
 			if tx['category'] == 'receive':
 				whichway = '<='
-			addy = tx['address']
-			self.latest_tx_widget.values.append('[{}]    {}          {} {} {}'.format(
-				tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
-				str(tx['amount']), whichway, addy
-			))
+			if 'address' in tx: # move operations do not have the address field
+				addy = tx['address']
+				self.latest_tx_widget.values.append('[{}]    {}          {} {} {}'.format(
+					tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
+					str(tx['amount']), whichway, addy
+				))
 		
 		addybal = self.get_wallet_addresses(allow_empty=True, return_balances=True)
 		for addy, bal in addybal:
