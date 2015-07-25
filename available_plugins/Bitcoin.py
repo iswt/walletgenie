@@ -99,44 +99,13 @@ class Bitcoin(DefaultPluginForm):
 		
 		# common background widget values
 		self.nodecount = btci['connections']
+		self.blockheight = btci['blocks']
 		self.balance = self.from_satoshis(self.access.getbalance())
 		self.unconfirmed_balance = None
+		self.uploaded = 0
+		self.downloaded = 0
 		
-		txs = self.access.listtransactions()
-		for tx in reversed(txs):
-			whichway = '=>'
-			if tx['category'] == 'receive':
-				whichway = '<='
-			if 'address' in tx: # move operations do not have the address, txid or block fields
-				addy = tx['address']
-				self.latest_tx_widget.values.append('[{}]    {}          {} BTC {} {}'.format(
-					tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
-					str(tx['amount']), whichway, addy
-				))
-		
-		addybal = self.get_wallet_addresses(allow_empty=False, return_balances=True)
-		for addy, bal in sorted(addybal, key=lambda x: x[1]):
-			self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
-		
-		rmpi = self.access.getrawmempool()
-		rpi = self.access.getmempoolinfo()
-		
-		self.latest_mempool_widget.name = 'Mempool / {} txs / {}'.format(rpi['size'], make_human_readable(rpi['bytes']))
-		
-		rawt = self.access._batch(
-			[
-				{'method': 'getrawtransaction', 'version': '1.1',
-				'params': [b2lx(tx), 1], 'id': str(i)} for i, tx in enumerate(rmpi if len(rmpi) <= 10 else rmpi[: 25])
-			]
-		)
-		self.latest_mempool_widget.values = []
-		for d in rawt:
-			val = decimal.Decimal('0.0')
-			for vo in d['result']['vout']:
-				val += vo['value']
-			tx = d['result']['txid']
-			
-			self.latest_mempool_widget.values.append('{:>12} BTC   {}'.format(val, tx))
+		self.update_form_values(check_balance=False, check_peers=False)
 	
 	def create(self):
 		'''
@@ -144,18 +113,29 @@ class Bitcoin(DefaultPluginForm):
 		'''
 		super(Bitcoin, self).create()
 		
-		addy_max_width = 58 # 34 + 4 + 20
-		if self.columns / 2 < addy_max_width:
+		self.address_widget_max_width = 58 # 34 + 4 + 20
+		
+		needed_half = False # used when instantiating the mempool widget below
+		addy_max_width = self.address_widget_max_width
+		if self.columns / 2 <= addy_max_width:
 			addy_max_width = int(self.columns / 2) - 5
+			self.address_widget_max_width = addy_max_width
+			needed_half = True
 		self.addresses_widget = self.add(
 			npyscreen.BoxTitle, name='Addresses', values=[], rely=4,
 			max_height=int(self.lines / 3), max_width=addy_max_width, wrap=True, scroll_exit=True
 		)
 		
+		mempool_max_width = int(self.columns / 2) - 1
+		mempool_relx = int(self.columns / 2)
+		if not needed_half:
+			mempool_relx = addy_max_width + 5 + 1
+			mempool_max_width = self.columns - (addy_max_width + 5 + 2)
+			
 		self.latest_mempool_widget = self.add(
 			npyscreen.BoxTitle, name='Mempool', values=['test'], scroll_exit=True,
-			relx=int(self.columns / 2), rely=4,
-			max_width=int(self.columns / 2) - 1, max_height=int(self.lines / 3)
+			relx=mempool_relx, rely=4,
+			max_width=mempool_max_width, max_height=int(self.lines / 3)
 		)
 		
 		self.latest_tx_widget = self.add(
@@ -171,6 +151,8 @@ class Bitcoin(DefaultPluginForm):
 		self.register_form_func('p', self.on_peer_view)
 		#self.set_default_form('w')
 		
+		self.add_handlers({'^R': self.update_form_values})
+		
 		self.bottom_commands = [
 			('Send', 0), ('Receive', 0), ('Sign', 1), ('Verify', 0), ('Peers', 0), ('^Quit', [0,1])
 		]
@@ -178,10 +160,29 @@ class Bitcoin(DefaultPluginForm):
 	def draw_form(self):
 		MAXY, MAXX = self.lines, self.columns
 		
-		peerstr = '{}'.format(self.nodecount)
+		peerstr = '{:>3}'.format(self.nodecount)
 		count_color = 'GOOD' if self.nodecount >= 8 else 'WARNING'
-		self.curses_pad.addstr(2, int(self.columns / 2), peerstr, curses.A_BOLD | self.parent.theme_manager.findPair(self, count_color))
-		self.curses_pad.addstr(2, int(self.columns / 2) + len(peerstr), ' Peers'.format(self.nodecount))
+		xrel = self.address_widget_max_width + 6
+		self.curses_pad.addstr(2, xrel, peerstr, curses.A_BOLD | self.parent.theme_manager.findPair(self, count_color))
+		self.curses_pad.addstr(2, xrel + len(peerstr), ' Peers')
+		
+		slen = xrel + len(peerstr) + len(' Peers')
+		self.curses_pad.addstr(2, slen, ' / ', curses.A_BOLD)
+		slen += 3
+		
+		blkstr = '{}'.format(self.blockheight)
+		self.curses_pad.addstr(2, slen, blkstr, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'CONTROL'))
+		slen += len(blkstr)
+		self.curses_pad.addstr(2, slen, ' / ', curses.A_BOLD)
+		slen += 3
+		
+		upspd = '{}'.format(self.uploaded)
+		downspd = '{}'.format(self.downloaded)
+		self.curses_pad.addstr(2, slen, downspd, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOODHL'))
+		slen += len(downspd)
+		self.curses_pad.addstr(2, slen, ' | ', curses.A_BOLD)
+		slen += 3
+		self.curses_pad.addstr(2, slen, upspd, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'STANDOUT'))
 		
 		balance_str1 = 'Balance:    '
 		self.curses_pad.addstr(2, 2, balance_str1)
@@ -190,9 +191,69 @@ class Bitcoin(DefaultPluginForm):
 		if self.unconfirmed_balance is not None:
 			balance_str = balance_str1 + balance_str2
 			self.curses_pad.addstr(2, 2 + len(balance_str), ' / ', curses.A_BOLD)
-			self.curses_pad.addstr(2, 4 + len(balance_str), ' {} BTC'.format(self.unconfirmed_balance), curses.A_BOLD | self.parent.theme_manager.findPair(self, 'WARNING'))
+			self.curses_pad.addstr(2, 4 + len(balance_str), ' {} BTC'.format(self.unconfirmed_balance), curses.A_BOLD | self.parent.theme_manager.findPair(self, 'CAUTION'))
 		
 		super(Bitcoin, self).draw_form()
+	
+	def update_form_values(
+			self, *args, check_balance=True, check_unconfirmed_balance=True, check_peers=True,
+			check_transactions=True, check_addresses=True, check_mempool=True, check_bandwidth=True):
+		
+		if check_balance:
+			self.balance = self.from_satoshis(self.access.getbalance())
+		if check_unconfirmed_balance:
+			pass
+		if check_peers:
+			btci = self.access.getnetworkinfo()
+			self.nodecount = btci['connections']
+		if check_bandwidth:
+			nt = self.access.getnettotals()
+			self.downloaded = make_human_readable(nt['totalbytesrecv'])
+			self.uploaded = make_human_readable(nt['totalbytessent'])
+		if check_transactions:
+			txs = self.access.listtransactions()
+			self.latest_tx_widget.values = []
+			for tx in reversed(txs):
+				whichway = '=>'
+				if tx['category'] == 'receive':
+					whichway = '<='
+				if 'address' in tx: # move operations do not have the address, txid or block fields
+					addy = tx['address']
+					self.latest_tx_widget.values.append('[{}]    {}          {} BTC {} {}'.format(
+						tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
+						str(tx['amount']), whichway, addy
+					))
+			#self.latest_tx_widget.display()
+		if check_addresses:
+			addybal = self.get_wallet_addresses(allow_empty=False, return_balances=True)
+			self.addresses_widget.values = []
+			for addy, bal in sorted(addybal, key=lambda x: x[1]):
+				self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
+			#self.addresses_widget.display()
+			self.addresses_widget.value = None
+			self.addresses_widget.update(clear=True)
+		if check_mempool:
+			rmpi = self.access.getrawmempool()
+			rpi = self.access.getmempoolinfo()
+			
+			self.latest_mempool_widget.name = 'Mempool / {} txs / {}'.format(rpi['size'], make_human_readable(rpi['bytes']))
+			rawt = self.access._batch(
+				[
+					{'method': 'getrawtransaction', 'version': '1.1',
+					'params': [b2lx(tx), 1], 'id': str(i)} for i, tx in enumerate(rmpi if len(rmpi) <= 50 else rmpi[: 50])
+				]
+			)
+			self.latest_mempool_widget.values = []
+			for d in reversed(rawt):
+				val = decimal.Decimal('0.0')
+				for vo in d['result']['vout']:
+					val += vo['value']
+				tx = d['result']['txid']
+				
+				self.latest_mempool_widget.values.append('{:>12} BTC   {}'.format(val, tx))
+			#self.latest_mempool_widget.display()
+			
+		self.display()
 	
 	def on_peer_view(self):
 		f = PeerViewForm()
