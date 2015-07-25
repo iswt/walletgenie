@@ -51,6 +51,7 @@ class SignMessageViewForm(PluginForm, npyscreen.ActionFormV2):
 	
 	def create(self):
 		super(SignMessageViewForm, self).create()
+		self.name = 'Sign message'
 		
 		self.Options = npyscreen.OptionList()
 		self.options = self.Options.options
@@ -89,6 +90,7 @@ class VerifyMessageViewForm(PluginForm, npyscreen.ActionFormV2):
 	
 	def create(self):
 		super(VerifyMessageViewForm, self).create()
+		self.name = 'Verify message'
 		
 		self.Options = npyscreen.OptionList()
 		self.Options.options.append(npyscreen.OptionFreeText('Signature:', value=''))
@@ -180,7 +182,7 @@ class Bitcoin(DefaultPluginForm):
 		self.uploaded = 0
 		self.downloaded = 0
 		
-		self.update_form_values(check_balance=False, check_peers=False)
+		self.update_form_values(check_balance=False, check_peers=False, getinfo=False)
 	
 	def create(self):
 		'''
@@ -198,7 +200,7 @@ class Bitcoin(DefaultPluginForm):
 			needed_half = True
 		self.addresses_widget = self.add(
 			npyscreen.BoxTitle, name='Addresses', values=[], rely=4,
-			max_height=int(self.lines / 3), max_width=addy_max_width, wrap=True, scroll_exit=True
+			max_height=int(self.lines / 3), max_width=addy_max_width, wrap=True, scroll_exit=False
 		)
 		
 		mempool_max_width = int(self.columns / 2) - 1
@@ -208,14 +210,14 @@ class Bitcoin(DefaultPluginForm):
 			mempool_max_width = self.columns - (addy_max_width + 5 + 2)
 			
 		self.latest_mempool_widget = self.add(
-			npyscreen.BoxTitle, name='Mempool', values=['test'], scroll_exit=True,
+			npyscreen.BoxTitle, name='Mempool', values=['test'], scroll_exit=False,
 			relx=mempool_relx, rely=4,
 			max_width=mempool_max_width, max_height=int(self.lines / 3)
 		)
 		
 		self.latest_tx_widget = self.add(
 			npyscreen.BoxTitle, name='Latest Transactions', values=[],
-			scroll_exit=True, max_height=int(self.lines / 2)
+			scroll_exit=False, max_height=int(self.lines / 2)
 		)
 		
 		self.register_form_func('i', self.on_send_message_view)
@@ -270,14 +272,39 @@ class Bitcoin(DefaultPluginForm):
 		
 		super(Bitcoin, self).draw_form()
 	
+	def resize(self):
+		super(Bitcoin, self).resize()
+		if self.columns / 2 <= self.address_widget_max_width:
+			self.latest_mempool_widget.max_width = int(self.columns / 2) - 1
+		else:
+			self.latest_mempool_widget.max_width = self.columns - (self.address_widget_max_width + 5 + 2)
+		
+		#self.addresses_widget.max_height = int(self.lines / 3)
+		self.addresses_widget.resize()
+		
+		#self.latest_mempool_widget.max_height = int(self.lines / 3)
+		self.latest_mempool_widget.resize()
+		
+		self.latest_tx_widget.max_height = int(self.lines / 2)
+		#self.latest_tx_widget.rely = int(self.lines / 2)
+		#self.latest_tx_widget.max_width = 
+		self.latest_tx_widget.resize()#rely = self.rely#int(self.lines / 3 )
+		
+		#super(Bitcoin, self).resize()
+	
 	def update_form_values(
-			self, *args, check_balance=True, check_unconfirmed_balance=True, check_peers=True,
+			self, *args, check_balance=True, check_unconfirmed_balance=True, check_peers=True, getinfo=True,
 			check_transactions=True, check_addresses=True, check_mempool=True, check_bandwidth=True):
 		
 		if check_balance:
 			self.balance = self.from_satoshis(self.access.getbalance())
 		if check_unconfirmed_balance:
-			pass
+			self.unconfirmed_balance = self.from_satoshis(self.access.getunconfirmedbalance())
+			if self.unconfirmed_balance <= 0.0:
+				self.unconfirmed_balance = None
+		if getinfo:
+			btci = self.access.getinfo()
+			self.blockheight = btci['blocks']
 		if check_peers:
 			btci = self.access.getnetworkinfo()
 			self.nodecount = btci['connections']
@@ -298,15 +325,11 @@ class Bitcoin(DefaultPluginForm):
 						tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
 						str(tx['amount']), whichway, addy
 					))
-			#self.latest_tx_widget.display()
 		if check_addresses:
 			addybal = self.get_wallet_addresses(allow_empty=False, return_balances=True)
 			self.addresses_widget.values = []
 			for addy, bal in sorted(addybal, key=lambda x: x[1]):
 				self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
-			#self.addresses_widget.display()
-			self.addresses_widget.value = None
-			self.addresses_widget.update(clear=True)
 		if check_mempool:
 			rmpi = self.access.getrawmempool()
 			rpi = self.access.getmempoolinfo()
@@ -326,9 +349,11 @@ class Bitcoin(DefaultPluginForm):
 				tx = d['result']['txid']
 				
 				self.latest_mempool_widget.values.append('{:>12} BTC   {}'.format(val, tx))
-			#self.latest_mempool_widget.display()
 			
-		self.display()
+		self.display() # update the values being drawn to the screen
+		self.latest_mempool_widget.update() # and then update all widgets to avoid blanking
+		self.latest_tx_widget.update() # perhaps this is inefficient?
+		self.addresses_widget.update()
 	
 	def on_peer_view(self):
 		f = PeerViewForm()
