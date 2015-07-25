@@ -41,6 +41,81 @@ class ReceiveViewForm(PluginForm, npyscreen.ActionFormV2):
 	def create(self):
 		super(ReceiveViewForm, self).create()
 
+class SignMessageViewForm(PluginForm, npyscreen.ActionFormV2):
+	
+	def __init__(self, validationfunc, signfunc, *args, **kwargs):
+		super(SignMessageViewForm, self).__init__(*args, **kwargs)
+		self.on_validate = validationfunc
+		self.on_sign = signfunc
+		self.allow_empty_strings = False
+	
+	def create(self):
+		super(SignMessageViewForm, self).create()
+		
+		self.Options = npyscreen.OptionList()
+		self.options = self.Options.options
+		
+		self.options.append(npyscreen.OptionFreeText('Message:', value=''))
+		
+		self.address_select = npyscreen.OptionSingleChoice('Address:', choices=[])
+		self.options.append(self.address_select)
+		
+		self.option_display = self.add(npyscreen.OptionListDisplay, values=self.Options.options, scroll_exit=True, max_height=None)
+	
+	def on_ok(self):
+		msg = self.options[0].get()
+		addy = self.options[1].get()
+		
+		if not self.allow_empty_strings:
+			if not msg or msg == '':
+				npyscreen.notify_confirm('Cannot leave `Message` field blank')
+				return True
+			if not addy:
+				npyscreen.notify_confirm('Cannot leave `Address` field blank')
+				return True
+			ret = self.on_validate(addy[0])
+			if type(ret) is str:
+				npyscreen.notify_confirm(ret)
+				return True
+			
+			self.on_sign(addy[0], msg)
+			return False
+
+class VerifyMessageViewForm(PluginForm, npyscreen.ActionFormV2):
+	def __init__(self, verifyfunc, *args, **kwargs):
+		super(VerifyMessageViewForm, self).__init__(*args, **kwargs)
+		self.on_verify = verifyfunc
+		self.allow_empty_strings = False
+	
+	def create(self):
+		super(VerifyMessageViewForm, self).create()
+		
+		self.Options = npyscreen.OptionList()
+		self.Options.options.append(npyscreen.OptionFreeText('Signature:', value=''))
+		self.Options.options.append(npyscreen.OptionFreeText('Message:', value=''))
+		self.Options.options.append(npyscreen.OptionFreeText('Address:', value=''))
+		
+		self.option_display = self.add(npyscreen.OptionListDisplay, values=self.Options.options, scroll_exit=True, max_height=None)
+	
+	def on_ok(self):
+		sig = self.Options.options[0].get()
+		msg = self.Options.options[1].get()
+		addy = self.Options.options[2].get()
+		
+		if not self.allow_empty_strings:
+			if not sig or sig == '':
+				npyscreen.notify_confirm('Cannot leave `Signature` field blank')
+				return True
+			if not msg or msg == '':
+				npyscreen.notify_confirm('Cannot leave `Message` field blank')
+				return True
+			if not addy or addy == '':
+				npyscreen.notify_confirm('Cannot leave `Message` field blank')
+				return True
+			
+			self.on_verify(addy, sig, msg)
+			return False
+
 class BitcoinRPCProxy(bitcoin.rpc.Proxy):
 	'''
 	wrap all _call functionality to catch JSONRPCException and print out the error
@@ -143,8 +218,8 @@ class Bitcoin(DefaultPluginForm):
 			scroll_exit=True, max_height=int(self.lines / 2)
 		)
 		
-		self.register_display_func('i', self._prompt_sign_message)
-		self.register_display_func('v', self._prompt_verify_message)
+		self.register_form_func('i', self.on_send_message_view)
+		self.register_form_func('v', self.on_verify_message_view)
 		
 		self.register_form_func('s', self.on_send_view)
 		self.register_form_func('r', self.on_receive_view)
@@ -267,6 +342,38 @@ class Bitcoin(DefaultPluginForm):
 		f = ReceiveViewForm()
 		return f
 	
+	def on_send_message_view(self):
+		def validate(addy):
+			if not self.is_address_valid(addy):
+				return '{} is not a valid Bitcoin address'.format(addy)
+			return True
+		
+		def sign(addy, msg):
+			signed = self.sign_message(addy, msg)
+			if signed:
+				outmsg = 'Address: {}\nSigned: {}\nMessage: {}'.format(addy, signed, msg)
+				try:
+					pyperclip.copy(outmsg)
+					outmsg += '\n(text has been copied to the clipboard)'
+				except NameError:
+					outmsg += '\n(tip: `pip install pyperclip` if you want me to be able to copy this text)'
+				
+				self.output(outmsg, title='Signed message')
+		
+		f = SignMessageViewForm(validate, sign)
+		f.address_select.choices = self.get_wallet_addresses(allow_empty=True)
+		return f
+	
+	def on_verify_message_view(self):
+		def verify(addy, sig, msg):
+			signed = self.access.verifymessage(addy, sig, msg)
+			if signed:
+				self.output('I can confirm the message was definitely signed by {}'.format(addy), title='Successful verification', wide=False)
+			else:
+				self.output('The message failed verification. (double check that your input was correct)', title='Message failed verification', wide=False)
+		f = VerifyMessageViewForm(verify)
+		return f
+	
 	def show_balance(self, *args):
 		self.output('You have {} BTC in your bitcoin coffers'.format(self.from_satoshis(self.access.getbalance())))
 	
@@ -295,59 +402,6 @@ class Bitcoin(DefaultPluginForm):
 		signed = self.access.signmessage(address, message)
 		self.try_lock_wallet()
 		return signed
-	
-	def _prompt_sign_message(self, *args):
-		addresses = self.get_wallet_addresses(allow_empty=True)
-		cop = ChoiceOptionPrompt(disp_name = 'Message Signing Details', prompt_options = [
-			{'widget': npyscreen.OptionFreeText, 'args': ['Message:'], 'kwargs': {'value': ''}},
-			{'widget': npyscreen.OptionSingleChoice, 'args': ['Address:'], 'kwargs': {'choices': addresses}}
-		])
-		cop.edit()
-		d = cop.get_options()
-		msg = d['Message:']
-		addresses = d['Address:']
-		
-		if cop.cancelled:
-			return False 
-		
-		addy = addresses[0]
-		tx = self.sign_message(addy, msg)
-		if tx:
-			outmsg = 'Address: {}\nSigned: {}\nMessage: {}'.format(addy, tx, msg)
-			try:
-				pyperclip.copy(outmsg)
-				outmsg += '\n(text has been copied to the clipboard)'
-			except NameError:
-				outmsg += '\n(tip: `pip install pyperclip` if you want me to be able to copy this text)'
-			self.output(outmsg, title='Signed message')
-	
-	def _prompt_verify_message(self, *args):
-		def validaddy(addy):
-			if self.is_address_valid(addy):
-				return True
-			else:
-				return '{} is not a valid Bitcoin address'.format(addy)
-		
-		cop = ChoiceOptionPrompt(disp_name = 'Message Verification Details', prompt_options = [
-			{'widget': npyscreen.OptionFreeText, 'args': ['Signature:'], 'kwargs': {'value': ''}},
-			{'widget': npyscreen.OptionFreeText, 'args': ['Message:'], 'kwargs': {'value': ''}},
-			{'widget': npyscreen.OptionFreeText, 'args': ['Address:'], 'kwargs': {'value': ''}, 'validator': validaddy},
-		])
-		cop.edit()
-		d = cop.get_options()
-		
-		signature = d['Signature:']
-		message = d['Message:']
-		address = d['Address:']
-		
-		if cop.cancelled:
-			return False 
-		
-		signed = self.access.verifymessage(address, signature, message)
-		if signed:
-			self.output('I can confirm the message was definitely signed by {}'.format(address), title='Successful verification')
-		else:
-			self.output('The message failed verification. (double check that your input was correct)', title='Message failed verification')
 	
 	def get_wallet_addresses(self, allow_empty=False, return_balances=False):
 		wallet_addresses = self.access.listaddressgroupings()
