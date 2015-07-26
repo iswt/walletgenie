@@ -1,7 +1,7 @@
 ####-*.patch
-gui/icons_rc.py
-lib/icons_rc.py
+lib/*.pyc
 available_plugins/__pycache__
 *.pyc
+*.out
 build/
 dist/

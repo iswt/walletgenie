@@ -1,6 +1,6 @@
 from wgplugins.WGPlugins import WGPluginForm, WalletGenieConfig, WalletGenieImportError
 from wgplugins.WGPlugins import DefaultPluginForm, PluginForm
-from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt
+from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt, ExtendedBoxTitle
 from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user, make_human_readable
 try:
 	from bitcoin.core import b2x, b2lx
@@ -19,6 +19,9 @@ import datetime
 
 from wgplugins.WGPlugins import PluginForm
 class PeerViewForm(PluginForm, npyscreen.FormMutt):
+	def __init__(self, *args, **kwargs):
+		super(PeerViewForm, self).__init__(*args, **kwargs)
+	
 	def create(self):
 		super(PeerViewForm, self).create()
 
@@ -34,7 +37,6 @@ class SendViewForm(PluginForm, npyscreen.ActionFormV2):
 		
 
 class ReceiveViewForm(PluginForm, npyscreen.ActionFormV2):
-	
 	def __init__(self, *args, **kwargs):
 		super(ReceiveViewForm, self).__init__(*args, **kwargs)
 	
@@ -199,9 +201,20 @@ class Bitcoin(DefaultPluginForm):
 			self.address_widget_max_width = addy_max_width
 			needed_half = True
 		self.addresses_widget = self.add(
-			npyscreen.BoxTitle, name='Addresses', values=[], rely=4,
-			max_height=int(self.lines / 3), max_width=addy_max_width, wrap=True, scroll_exit=False
+			ExtendedBoxTitle, name='Addresses', values=[], rely=5,
+			max_height=int(self.lines / 3) - 1, max_width=addy_max_width, wrap=True, scroll_exit=False
 		)
+		
+		self.show_empty_addresses_widget = self.add(
+			npyscreen.Checkbox, name = 'Show empty addresses',
+			max_width=addy_max_width, rely=4, value=False
+		)
+		def on_empty_address_toggle(*args):
+			self.update_form_values(check_addresses=True,
+				check_balance=False, check_unconfirmed_balance=False, check_peers=False, getinfo=False,
+				check_transactions=False, check_mempool=False, check_bandwidth=False
+			)
+		self.show_empty_addresses_widget.whenToggled = on_empty_address_toggle
 		
 		mempool_max_width = int(self.columns / 2) - 1
 		mempool_relx = int(self.columns / 2)
@@ -210,17 +223,17 @@ class Bitcoin(DefaultPluginForm):
 			mempool_max_width = self.columns - (addy_max_width + 5 + 2)
 			
 		self.latest_mempool_widget = self.add(
-			npyscreen.BoxTitle, name='Mempool', values=['test'], scroll_exit=False,
+			ExtendedBoxTitle, name='Mempool', values=['test'], scroll_exit=False,
 			relx=mempool_relx, rely=4,
 			max_width=mempool_max_width, max_height=int(self.lines / 3)
 		)
 		
 		self.latest_tx_widget = self.add(
-			npyscreen.BoxTitle, name='Latest Transactions', values=[],
-			scroll_exit=False, max_height=int(self.lines / 2)
+			ExtendedBoxTitle, name='Latest Transactions', values=[],
+			scroll_exit=False, max_height=int(self.lines / 2) - 3
 		)
 		
-		self.register_form_func('i', self.on_send_message_view)
+		self.register_form_func('i', self.on_sign_message_view)
 		self.register_form_func('v', self.on_verify_message_view)
 		
 		self.register_form_func('s', self.on_send_view)
@@ -274,27 +287,38 @@ class Bitcoin(DefaultPluginForm):
 	
 	def resize(self):
 		super(Bitcoin, self).resize()
+		
+		self.address_widget_max_width = 58 # 34 + 4 + 20
+		addy_max_width = self.address_widget_max_width
+		if self.columns / 2 <= addy_max_width:
+			addy_max_width = int(self.columns / 2) - 5
+			self.address_widget_max_width = addy_max_width
+		self.addresses_widget.max_width = addy_max_width
+		for w in self.addresses_widget._my_widgets:
+			w.width = self.addresses_widget.max_width - 3
+		
 		if self.columns / 2 <= self.address_widget_max_width:
 			self.latest_mempool_widget.max_width = int(self.columns / 2) - 1
+			self.latest_mempool_widget.relx = int(self.columns / 2)
 		else:
 			self.latest_mempool_widget.max_width = self.columns - (self.address_widget_max_width + 5 + 2)
+			self.latest_mempool_widget.relx = addy_max_width + 5 + 1
+		for w in self.latest_mempool_widget._my_widgets:
+			w.relx = self.latest_mempool_widget.relx + 2
+			w.width = self.latest_mempool_widget.max_width - 3
 		
-		#self.addresses_widget.max_height = int(self.lines / 3)
 		self.addresses_widget.resize()
-		
-		#self.latest_mempool_widget.max_height = int(self.lines / 3)
 		self.latest_mempool_widget.resize()
 		
-		self.latest_tx_widget.max_height = int(self.lines / 2)
-		#self.latest_tx_widget.rely = int(self.lines / 2)
-		#self.latest_tx_widget.max_width = 
-		self.latest_tx_widget.resize()#rely = self.rely#int(self.lines / 3 )
-		
-		#super(Bitcoin, self).resize()
+		self.latest_tx_widget.max_height = int(self.lines / 2) - 3
+		for w in self.latest_tx_widget._my_widgets:
+			w.width = self.latest_tx_widget.max_width - 3
+		self.latest_tx_widget.resize()
 	
-	def update_form_values(
-			self, *args, check_balance=True, check_unconfirmed_balance=True, check_peers=True, getinfo=True,
-			check_transactions=True, check_addresses=True, check_mempool=True, check_bandwidth=True):
+	def update_form_values(self, *args, 
+			check_balance=True, check_unconfirmed_balance=True, check_peers=True, 
+			getinfo=True, check_transactions=True, check_addresses=True, check_mempool=True, 
+			check_bandwidth=True):
 		
 		if check_balance:
 			self.balance = self.from_satoshis(self.access.getbalance())
@@ -326,9 +350,10 @@ class Bitcoin(DefaultPluginForm):
 						str(tx['amount']), whichway, addy
 					))
 		if check_addresses:
-			addybal = self.get_wallet_addresses(allow_empty=False, return_balances=True)
+			allow_empty = self.show_empty_addresses_widget.value
+			addybal = self.get_wallet_addresses(allow_empty=allow_empty, return_balances=True)
 			self.addresses_widget.values = []
-			for addy, bal in sorted(addybal, key=lambda x: x[1]):
+			for addy, bal in sorted(addybal, key=lambda x: x[1])[::-1]:
 				self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
 		if check_mempool:
 			rmpi = self.access.getrawmempool()
@@ -367,7 +392,7 @@ class Bitcoin(DefaultPluginForm):
 		f = ReceiveViewForm()
 		return f
 	
-	def on_send_message_view(self):
+	def on_sign_message_view(self):
 		def validate(addy):
 			if not self.is_address_valid(addy):
 				return '{} is not a valid Bitcoin address'.format(addy)

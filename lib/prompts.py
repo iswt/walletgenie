@@ -1,6 +1,32 @@
 import npyscreen
 import curses
 
+class ExtendedTextfield(npyscreen.Textfield):
+	
+	def __init__(self, *args, **kwargs):
+		super(ExtendedTextfield, self).__init__(*args, **kwargs)
+	
+	def update(self, clear=True, cursor=True):
+		super(ExtendedTextfield, self).update(clear=clear, cursor=cursor)
+		
+	def display_value(self, value):
+		sret = super(ExtendedTextfield, self).display_value(value)
+		if len(sret) >= self.width:
+			return '{}...'.format(sret[ : self.max_width - 4])
+		return sret
+
+class ExtendedMultiLine(npyscreen.MultiLine):
+	_contained_widgets = ExtendedTextfield
+	
+	def __init__(self, *args, **kwargs):
+		super(ExtendedMultiLine, self).__init__(*args, **kwargs)
+
+class ExtendedBoxTitle(npyscreen.BoxTitle):
+	_contained_widget = ExtendedMultiLine
+	
+	def __init__(self, screen, contained_widget_arguments=None, *args, **kwargs):
+		super(ExtendedBoxTitle, self).__init__(screen, *args, **kwargs)
+
 class ChoiceOptionPrompt(npyscreen.ActionFormV2):
 	#OK_BUTTON_BR_OFFSET = (2, 10)
 	#CANCEL_BUTTON_BR_OFFSET = (2, 12)
@@ -243,7 +269,7 @@ class PluginViewForm(npyscreen.FormBaseNew):
 	MAIN_WIDGET_CLASSES = [npyscreen.MultiLine]
 	MAIN_WIDGET_CLASS_START_LINE = 1
 	STATUS_WIDGET_CLASS = npyscreen.Textfield
-	STATUS_WIDGET_X_OFFSET = 1
+	STATUS_WIDGET_X_OFFSET = 2
 	COMMAND_WIDGET_CLASS= npyscreen.Textfield
 	COMMAND_WIDGET_NAME = None
 	COMMAND_WIDGET_BEGIN_ENTRY_AT = None
@@ -264,9 +290,9 @@ class PluginViewForm(npyscreen.FormBaseNew):
 			curses.ACS_HLINE, MAXX - 1
 		)  
 		
-		slen = 1
+		slen = 2
 		#top_bar = 
-		bot_bar = MAXY - 2 - self.BLANK_LINES_BASE
+		bot_bar = MAXY - 1 - self.BLANK_LINES_BASE
 		
 		def mkcmdstr(s, i, slen, isfirst=False):
 			if type(i) is list:
