@@ -3,7 +3,7 @@ from wgplugins.WGPlugins import DefaultPluginForm, PluginForm
 from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt, ExtendedBoxTitle
 from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user, make_human_readable
 try:
-	from bitcoin.core import b2x, b2lx
+	from bitcoin.core import b2x, b2lx, x, lx
 	import bitcoin.rpc
 except ImportError:
 	raise WalletGenieImportError('Unable to import bitcoinlib -- install it with: `pip install python-bitcoinlib`')
@@ -16,6 +16,7 @@ import curses
 import json
 import decimal
 import datetime
+import time
 
 from wgplugins.WGPlugins import PluginForm
 class PeerViewForm(PluginForm, npyscreen.FormMutt):
@@ -174,11 +175,12 @@ class Bitcoin(DefaultPluginForm):
 			(btci['version'] % 10000) / 100,
 			btci['version'] % 100
 		)
-		self.wStatus1.value = 'Bitcoind v{} / {}'.format(version_str, btcni['subversion'].replace('/', ''))
+		self.wStatus1.value = ' Bitcoind v{} / {} '.format(version_str, btcni['subversion'].replace('/', ''))
 		
 		# common background widget values
 		self.nodecount = btci['connections']
 		self.blockheight = btci['blocks']
+		self.tslb = 0
 		self.balance = self.from_satoshis(self.access.getbalance())
 		self.unconfirmed_balance = None
 		self.uploaded = 0
@@ -250,29 +252,104 @@ class Bitcoin(DefaultPluginForm):
 	def draw_form(self):
 		MAXY, MAXX = self.lines, self.columns
 		
-		peerstr = '{:>3}'.format(self.nodecount)
+		tslb = '{}'.format(make_human_readable(self.tslb, time=True))
+		
+		total_str = '{} ({} ago) / {:>3} Peers / {} | {}'.format(
+			self.blockheight, tslb, self.nodecount, self.uploaded, self.downloaded
+		)
+		
+		peerstr = '{}'.format(self.nodecount)
 		count_color = 'GOOD' if self.nodecount >= 8 else 'WARNING'
 		xrel = self.address_widget_max_width + 6
-		self.curses_pad.addstr(2, xrel, peerstr, curses.A_BOLD | self.parent.theme_manager.findPair(self, count_color))
-		self.curses_pad.addstr(2, xrel + len(peerstr), ' Peers')
 		
-		slen = xrel + len(peerstr) + len(' Peers')
-		self.curses_pad.addstr(2, slen, ' / ', curses.A_BOLD)
-		slen += 3
+		peer_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, count_color)
+		downloaded_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOODHL')
+		uploaded_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'STANDOUT')
+		blkheight_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'STANDOUT')
 		
-		blkstr = '{}'.format(self.blockheight)
-		self.curses_pad.addstr(2, slen, blkstr, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'CONTROL'))
-		slen += len(blkstr)
-		self.curses_pad.addstr(2, slen, ' / ', curses.A_BOLD)
-		slen += 3
+		blktc = 'GOOD'
+		if self.tslb > 600: # 10m
+			blktc = 'CAUTION'
+		elif self.tslb > 1800: # 30m
+			blktc = 'WARNING'
+		elif self.tslb > 3600: # 1h
+			blktc = 'CRITICAL'
 		
-		upspd = '{}'.format(self.uploaded)
-		downspd = '{}'.format(self.downloaded)
-		self.curses_pad.addstr(2, slen, downspd, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOODHL'))
-		slen += len(downspd)
-		self.curses_pad.addstr(2, slen, ' | ', curses.A_BOLD)
-		slen += 3
-		self.curses_pad.addstr(2, slen, upspd, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'STANDOUT'))
+		blktime_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, blktc)
+		
+		if xrel + len(total_str) >= MAXX - 3:
+			b1 = 'Block '
+			b2 = '{}'.format(self.blockheight)
+			b3 = ' was found '
+			b4 = '{}'.format(tslb)
+			b5 = ' ago'
+			
+			slen = xrel
+			
+			self.curses_pad.addstr(3, xrel, b1)
+			slen += len(b1)
+			self.curses_pad.addstr(3, slen, b2, blkheight_col)
+			slen += len(b2)
+			self.curses_pad.addstr(3, slen, b3)
+			slen += len(b3)
+			self.curses_pad.addstr(3, slen, b4, blktime_col)
+			slen += len(b4)
+			self.curses_pad.addstr(3, slen, b5)
+			slen += len(b5)
+			
+			slen = xrel # restart from same x
+			
+			p1 = ' Peers'
+			p2 = ' / '
+			self.curses_pad.addstr(2, slen, peerstr, peer_col)
+			slen += len(peerstr)
+			self.curses_pad.addstr(2, slen, p1)
+			slen += len(p1)
+			self.curses_pad.addstr(2, slen, p2, curses.A_BOLD)
+			slen += len(p2)
+			
+			u1 = '{}'.format(self.uploaded)
+			d1 = '{}'.format(self.downloaded)
+			self.curses_pad.addstr(2, slen, d1, downloaded_col)
+			slen += len(d1)
+			self.curses_pad.addstr(2, slen, ' | ', curses.A_BOLD)
+			slen += 3
+			self.curses_pad.addstr(2, slen, u1, uploaded_col)
+			slen += len(u1)
+			
+		else:
+			slen = xrel
+			
+			b1 = ' (found '
+			b2 = '{}'.format(tslb)
+			b3 = ' ago)'
+			blkstr = '{}'.format(self.blockheight)
+			self.curses_pad.addstr(2, slen, blkstr, blkheight_col)
+			slen += len(blkstr)
+			self.curses_pad.addstr(2, slen, b1)
+			slen += len(b1)
+			self.curses_pad.addstr(2, slen, b2, blktime_col)
+			slen += len(b2)
+			self.curses_pad.addstr(2, slen, b3)
+			slen += len(b3)
+			self.curses_pad.addstr(2, slen, ' / ', curses.A_BOLD)
+			slen += 3
+			
+			p1 = ' Peers'
+			self.curses_pad.addstr(2, slen, peerstr, peer_col)
+			slen += len(peerstr)
+			self.curses_pad.addstr(2, slen, p1)
+			slen += len(p1)
+			self.curses_pad.addstr(2, slen, ' / ', curses.A_BOLD)
+			slen += 3
+			
+			uptot = '{}'.format(self.uploaded)
+			downtot = '{}'.format(self.downloaded)
+			self.curses_pad.addstr(2, slen, downtot, downloaded_col)
+			slen += len(downtot)
+			self.curses_pad.addstr(2, slen, ' | ', curses.A_BOLD)
+			slen += 3
+			self.curses_pad.addstr(2, slen, uptot, uploaded_col)
 		
 		balance_str1 = 'Balance:    '
 		self.curses_pad.addstr(2, 2, balance_str1)
@@ -318,7 +395,7 @@ class Bitcoin(DefaultPluginForm):
 	def update_form_values(self, *args, 
 			check_balance=True, check_unconfirmed_balance=True, check_peers=True, 
 			getinfo=True, check_transactions=True, check_addresses=True, check_mempool=True, 
-			check_bandwidth=True):
+			check_bandwidth=True, check_tslb=True):
 		
 		if check_balance:
 			self.balance = self.from_satoshis(self.access.getbalance())
@@ -329,6 +406,13 @@ class Bitcoin(DefaultPluginForm):
 		if getinfo:
 			btci = self.access.getinfo()
 			self.blockheight = btci['blocks']
+		if check_tslb:
+			blkinfo = self.access.getblock( lx(self.access.getbestblockhash()) )
+			blkheader = blkinfo.get_header()
+			#self.tslb = blkheader.nTime
+			self.tslb = time.time() - blkheader.nTime
+			#tslb = datetime.datetime.utcnow() - datetime.datetime.fromtimestamp(blkheader.nTime)
+			#self.tslb = tslb.seconds // 60 % 60 # keep it in minutes
 		if check_peers:
 			btci = self.access.getnetworkinfo()
 			self.nodecount = btci['connections']

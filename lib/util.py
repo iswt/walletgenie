@@ -52,9 +52,47 @@ def get_address_by_netki_wallet(wallet, coin, printerrors=True):
 	else:
 		return None
 
-def make_human_readable(num):
-	for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
-		if abs(num) < 1024.0:
-			return '{:.1f} {}B'.format(num, unit)
-		num /= 1024.0
-	return '{:.1f} YiB'.format(num)
+def make_human_readable(num, time=False):
+	if time: # http://stackoverflow.com/a/26781642
+		# this is only currenlty used for block timestamps and so it should be limited to
+		# hours at most. However, it's built out for much more
+		intervals = [
+			1, 60, 60*60, 60*60*24, 60*60*24*7, 60*60*24*7*4, 60*60*24*7*4*12,
+			60*60*24*7*4*12*100, 60*60*24*7*4*12*100*10,
+		]
+		names = [
+			('second', 'seconds'), ('minute', 'minutes'), ('hour', 'hours'),
+			('day', 'days'), ('week', 'weeks'), ('month', 'months'),
+			('year', 'years'), ('century', 'centuries'), ('millennium', 'millennia')
+		]
+		res = []
+		unit = list(map(lambda i: i[1], names)).index('seconds')
+		for i in range(len(names) - 1, -1, -1):
+			a = num // intervals[i]
+			if a > 0:
+				res.append( (a, names[i][int(1 % a)]) )
+				num -= a * intervals[i]
+		
+		cont = 0
+		for u in res:
+			if u[0] > 0:
+				cont += 1
+		buf = ''
+		i = 0
+		for u in res:
+			if u[0] > 0:
+				buf += '{:.0f} {}'.format(u[0], u[1])
+				cont -= 1
+			if i < len(res) - 1:
+				if cont > 1:
+					buf += ', '
+				else:
+					buf += ' and '
+			i += 1
+		return buf
+	else:
+		for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+			if abs(num) < 1024.0:
+				return '{:.1f} {}B'.format(num, unit)
+			num /= 1024.0
+		return '{:.1f} YiB'.format(num)
