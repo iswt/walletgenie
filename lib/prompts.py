@@ -14,39 +14,32 @@ class ExtendedTextfield(npyscreen.TextfieldUnicode):
 		
 	def display_value(self, value):
 		try:
-			l = json.loads(str(value))
-			#sret = ''
-			sret = ' '.join([str(x) for x in l])
+			# divide the line into len(value) columns and print each entry in value in each column
+			columns = self.width - 2
+			items = json.loads(str(value))
 			
-			# divide the line into len(l) columns and print each entry in l in each column
-			columns = self.width - 2#len(l)
-			match = re.match(r'(^\s+)(.*)$', sret)
-			if not match:
-				left, right, w = '', sret, columns
-			else:
-				left, right, w = match.group(1), match.group(2), columns - len(match.group(1))
-			
-			items = right.split()
 			for i in range(len(items) - 1):
 				items[i] += ' '
 			
-			left_count = w - (sum([ len(x) for x in items ]))
+			left_count = columns - (sum([ len(x) for x in items ]))
 			while left_count > 0 and len(items) > 1:
 				for i in range(len(items) - 1):
 					items[i] += ' '
 					left_count -= 1
 					if left_count < 1:
 						break
-			res = left + ''.join(items)
-			
+			res = ''.join(items)
 			sret = res
-			
 		except ValueError:
 			sret = super(ExtendedTextfield, self).display_value(value)
 		
 		if len(sret) >= self.width:
 			return '{}...'.format(sret[ : self.max_width - 4])
 		return sret
+	
+	def display(self):
+		#super(ExtendedTextfield, self).display()
+		pass
 
 class ExtendedMultiLine(npyscreen.MultiLine):
 	_contained_widgets = ExtendedTextfield

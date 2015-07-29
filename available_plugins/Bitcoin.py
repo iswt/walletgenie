@@ -437,10 +437,19 @@ class Bitcoin(DefaultPluginForm):
 					whichway = '<='# u'\u2B05'
 				if 'address' in tx: # move operations do not have the address, txid or block fields
 					addy = tx['address']
+					conf_symbols = [u'\u25CB', u'\u25D4', u'\u25D1', u'\u25D5', u'\u25CF', u'\u25D5\u25D2', u'\u25D5\u25CF']
+					
+					if int(tx['confirmations']) < 0:
+						conf_symbol = u'\u2715 '
+					elif int(tx['confirmations']) >= 0 and int(tx['confirmations']) <= 6:
+						conf_symbol = u'{} '.format(conf_symbols[tx['confirmations']])
+					else:# confirmations > 6
+						conf_symbol =  u'\u2713 '
 					self.latest_tx_widget.values.append(json.dumps(
 						[
-							tx['confirmations'], str(datetime.datetime.fromtimestamp(tx['time'])),
-							str(tx['amount']), whichway, addy
+							u'{}{}'.format(conf_symbol , tx['confirmations']), 
+							datetime.datetime.fromtimestamp(tx['time']).strftime('%a %d %b %Y @ %X'),
+							'{} BTC   {}   {}'.format(tx['amount'], whichway, addy)
 						]
 					))
 		if check_addresses:
@@ -469,7 +478,7 @@ class Bitcoin(DefaultPluginForm):
 					val += vo['value']
 				tx = d['result']['txid']
 				
-				self.latest_mempool_widget.values.append('{:>12} BTC   {}'.format(val, tx))
+				self.latest_mempool_widget.values.append(json.dumps(['{:>12} BTC'.format(val), '   {}'.format(tx)]))
 			
 		self.display() # update the values being drawn to the screen
 		self.latest_mempool_widget.update() # and then update all widgets to avoid blanking
