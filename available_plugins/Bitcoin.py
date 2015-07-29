@@ -115,7 +115,7 @@ class VerifyMessageViewForm(PluginForm, npyscreen.ActionFormV2):
 				npyscreen.notify_confirm('Cannot leave `Message` field blank')
 				return True
 			if not addy or addy == '':
-				npyscreen.notify_confirm('Cannot leave `Message` field blank')
+				npyscreen.notify_confirm('Cannot leave `Address` field blank')
 				return True
 			
 			self.on_verify(addy, sig, msg)
@@ -278,44 +278,52 @@ class Bitcoin(DefaultPluginForm):
 		blktime_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, blktc)
 		
 		if xrel + len(total_str) >= MAXX - 3:
-			b1 = 'Block '
-			b2 = '{}'.format(self.blockheight)
-			b3 = ' was found '
-			b4 = '{}'.format(tslb)
-			b5 = ' ago'
-			
-			slen = xrel
-			
-			self.curses_pad.addstr(3, xrel, b1)
-			slen += len(b1)
-			self.curses_pad.addstr(3, slen, b2, blkheight_col)
-			slen += len(b2)
-			self.curses_pad.addstr(3, slen, b3)
-			slen += len(b3)
-			self.curses_pad.addstr(3, slen, b4, blktime_col)
-			slen += len(b4)
-			self.curses_pad.addstr(3, slen, b5)
-			slen += len(b5)
+			if xrel + len('Block {} was found {} ago'.format(self.blockheight, tslb)) >= MAXX - 3:
+				self.curses_pad.addstr(3, xrel, '{}'.format(self.blockheight), blkheight_col)
+			else:
+				b1 = 'Block '
+				b2 = '{}'.format(self.blockheight)
+				b3 = ' was found '
+				b4 = '{}'.format(tslb)
+				b5 = ' ago'
+				
+				slen = xrel
+				
+				self.curses_pad.addstr(3, xrel, b1)
+				slen += len(b1)
+				self.curses_pad.addstr(3, slen, b2, blkheight_col)
+				slen += len(b2)
+				self.curses_pad.addstr(3, slen, b3)
+				slen += len(b3)
+				self.curses_pad.addstr(3, slen, b4, blktime_col)
+				slen += len(b4)
+				self.curses_pad.addstr(3, slen, b5)
+				slen += len(b5)
 			
 			slen = xrel # restart from same x
 			
-			p1 = ' Peers'
-			p2 = ' / '
-			self.curses_pad.addstr(2, slen, peerstr, peer_col)
-			slen += len(peerstr)
-			self.curses_pad.addstr(2, slen, p1)
-			slen += len(p1)
-			self.curses_pad.addstr(2, slen, p2, curses.A_BOLD)
-			slen += len(p2)
-			
-			u1 = '{}'.format(self.uploaded)
-			d1 = '{}'.format(self.downloaded)
-			self.curses_pad.addstr(2, slen, d1, downloaded_col)
-			slen += len(d1)
-			self.curses_pad.addstr(2, slen, ' | ', curses.A_BOLD)
-			slen += 3
-			self.curses_pad.addstr(2, slen, u1, uploaded_col)
-			slen += len(u1)
+			if xrel + len('{} Peers / {} | {}'.format(peerstr, self.downloaded, self.uploaded)) >= MAXX - 3:
+				self.curses_pad.addstr(2, slen, peerstr, peer_col)
+				slen += len(peerstr)
+				self.curses_pad.addstr(2, slen, ' Peers')
+			else:
+				p1 = ' Peers'
+				p2 = ' / '
+				self.curses_pad.addstr(2, slen, peerstr, peer_col)
+				slen += len(peerstr)
+				self.curses_pad.addstr(2, slen, p1)
+				slen += len(p1)
+				self.curses_pad.addstr(2, slen, p2, curses.A_BOLD)
+				slen += len(p2)
+				
+				u1 = '{}'.format(self.uploaded)
+				d1 = '{}'.format(self.downloaded)
+				self.curses_pad.addstr(2, slen, d1, downloaded_col)
+				slen += len(d1)
+				self.curses_pad.addstr(2, slen, ' | ', curses.A_BOLD)
+				slen += 3
+				self.curses_pad.addstr(2, slen, u1, uploaded_col)
+				slen += len(u1)
 			
 		else:
 			slen = xrel
@@ -424,26 +432,30 @@ class Bitcoin(DefaultPluginForm):
 			txs = self.access.listtransactions()
 			self.latest_tx_widget.values = []
 			for tx in reversed(txs):
-				whichway = '=>'
+				whichway = '=>'# u'\u279C' 
 				if tx['category'] == 'receive':
-					whichway = '<='
+					whichway = '<='# u'\u2B05'
 				if 'address' in tx: # move operations do not have the address, txid or block fields
 					addy = tx['address']
-					self.latest_tx_widget.values.append('[{}]    {}          {} BTC {} {}'.format(
-						tx['confirmations'], datetime.datetime.fromtimestamp(tx['time']),
-						str(tx['amount']), whichway, addy
+					self.latest_tx_widget.values.append(json.dumps(
+						[
+							tx['confirmations'], str(datetime.datetime.fromtimestamp(tx['time'])),
+							str(tx['amount']), whichway, addy
+						]
 					))
 		if check_addresses:
 			allow_empty = self.show_empty_addresses_widget.value
 			addybal = self.get_wallet_addresses(allow_empty=allow_empty, return_balances=True)
 			self.addresses_widget.values = []
 			for addy, bal in sorted(addybal, key=lambda x: x[1])[::-1]:
-				self.addresses_widget.values.append('{0}   {1: >12} BTC'.format(addy, bal))
+				self.addresses_widget.values.append(
+					json.dumps(['{}'.format(addy), '{:>12} BTC'.format(bal)])
+				)
 		if check_mempool:
 			rmpi = self.access.getrawmempool()
 			rpi = self.access.getmempoolinfo()
 			
-			self.latest_mempool_widget.name = 'Mempool / {} txs / {}'.format(rpi['size'], make_human_readable(rpi['bytes']))
+			self.latest_mempool_widget.name = 'Mempool / {} txs / {}'.format(self.formatted(rpi['size']), make_human_readable(rpi['bytes']))
 			rawt = self.access._batch(
 				[
 					{'method': 'getrawtransaction', 'version': '1.1',

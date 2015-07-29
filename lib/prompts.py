@@ -1,7 +1,10 @@
 import npyscreen
 import curses
 
-class ExtendedTextfield(npyscreen.Textfield):
+import json
+import re
+
+class ExtendedTextfield(npyscreen.TextfieldUnicode):
 	
 	def __init__(self, *args, **kwargs):
 		super(ExtendedTextfield, self).__init__(*args, **kwargs)
@@ -10,7 +13,37 @@ class ExtendedTextfield(npyscreen.Textfield):
 		super(ExtendedTextfield, self).update(clear=clear, cursor=cursor)
 		
 	def display_value(self, value):
-		sret = super(ExtendedTextfield, self).display_value(value)
+		try:
+			l = json.loads(str(value))
+			#sret = ''
+			sret = ' '.join([str(x) for x in l])
+			
+			# divide the line into len(l) columns and print each entry in l in each column
+			columns = self.width - 2#len(l)
+			match = re.match(r'(^\s+)(.*)$', sret)
+			if not match:
+				left, right, w = '', sret, columns
+			else:
+				left, right, w = match.group(1), match.group(2), columns - len(match.group(1))
+			
+			items = right.split()
+			for i in range(len(items) - 1):
+				items[i] += ' '
+			
+			left_count = w - (sum([ len(x) for x in items ]))
+			while left_count > 0 and len(items) > 1:
+				for i in range(len(items) - 1):
+					items[i] += ' '
+					left_count -= 1
+					if left_count < 1:
+						break
+			res = left + ''.join(items)
+			
+			sret = res
+			
+		except ValueError:
+			sret = super(ExtendedTextfield, self).display_value(value)
+		
 		if len(sret) >= self.width:
 			return '{}...'.format(sret[ : self.max_width - 4])
 		return sret
