@@ -3,7 +3,11 @@ from wgplugins.WGPlugins import DefaultPluginForm, PluginForm
 from lib.prompts import PopupPrompt, ChoicePopup, PasswordPrompt, ChoiceOptionPrompt, ExtendedBoxTitle
 from lib.util import get_address_by_netki_wallet, get_address_by_ltb_user, make_human_readable
 try:
-	from bitcoin.core import b2x, b2lx, x, lx
+	from bitcoin.core import b2x, b2lx, x, lx, COIN, Hash160
+	from bitcoin.core import COutPoint, CMutableTxOut, CMutableTxIn, CMutableTransaction
+	from bitcoin.core.script import CScript
+	from bitcoin.core.scripteval import VerifyScript, SCRIPT_VERIFY_P2SH
+	from bitcoin.wallet import CBitcoinAddress
 	import bitcoin.rpc
 except ImportError:
 	raise WalletGenieImportError('Unable to import bitcoinlib -- install it with: `pip install python-bitcoinlib`')
@@ -27,15 +31,100 @@ class PeerViewForm(PluginForm, npyscreen.FormMutt):
 		super(PeerViewForm, self).create()
 
 class SendViewForm(PluginForm, npyscreen.ActionFormV2):
-	def __init__(self, *args, **kwargs):
+	def __init__(self, parent, *args, **kwargs):
 		super(SendViewForm, self).__init__(*args, **kwargs)
+		self.btc = parent
+		self.balance_str = self.add(npyscreen.TitleFixedText, name='You have {} Bitcoin available to send'.format(self.btc.balance), rely=2, editable=False)
 	
 	def create(self):
 		super(SendViewForm, self).create()
-	
-	def draw_form(self):
-		super(SendViewForm, self).draw_form()
+		self.name = 'Send Bitcoin'
 		
+		self.add(npyscreen.TitleFixedText, name='Enter payment information:', rely=4, editable=False)
+		
+		begent = 20
+		
+		self.amnt = self.add(
+			npyscreen.TitleText, name='Amount:', begin_entry_at=begent, value='', rely=6, max_width=begent + 12,
+			exit_left=True, exit_right=True
+		)
+		self.amnt_max_but = self.add(npyscreen.ButtonPress, name='MAX', rely=6, relx=begent + 12  + 3)
+		def onAmntMaxPressed():
+			self.amnt.value = str(self.btc.balance)
+			self.amnt.update()
+		self.amnt_max_but.whenPressed = onAmntMaxPressed
+		
+		self.fee = self.add(
+			npyscreen.TitleText, name='Fee/KB:', begin_entry_at=begent, value='0.0001', rely=7, max_width=begent + 12,
+			exit_left=True, exit_right=True
+		)
+		self.calc_fee_but = self.add(npyscreen.ButtonPress, name='Calculate High Priority', rely=7, relx=begent + 12 + 3)
+		def onCalcFeePressed():
+			self.fee.value = str(self.btc.access.estimatefee(1))
+			self.fee.update()
+		self.calc_fee_but.whenPressed = onCalcFeePressed
+		
+		self.address = self.add(npyscreen.TitleText, name='Address / user:', begin_entry_at=begent, rely=8)
+		self.coin_control = self.add(npyscreen.Checkbox, name = 'Coin Control?', value=True, rely=10)
+	
+	def on_send(self, amnt, fee, addy):
+		pass
+	
+	def on_ok(self):
+		try:
+			amnt = decimal.Decimal(self.amnt.value)
+		except Exception:
+			npyscreen.notify_confirm('Invalid amount')
+			self.amnt.value = ''
+			self.amnt.update()
+			return True
+		
+		try:
+			fee = decimal.Decimal(self.fee.value)
+		except Exception:
+			npyscreen.notify_confirm('Invalid Fee')
+			self.fee.value = ''
+			self.fee.update()
+			return True
+		
+		try:
+			addy = self.address.value
+			if not self.btc.is_address_valid(addy):
+				npyscreen.notify_wait('Checking Let\'s Talk Bitcoin! for address belonging to `{}`'.format(addy))
+				
+				ltbu = get_address_by_ltb_user(addy)
+				nu = None
+				if not ltbu:
+					if '.' in addy:
+						npyscreen.notify_wait('Checking Netki for address belonging to wallet identified by `{}`'.format(addy))
+						
+						nu = get_address_by_netki_wallet(addy, self.btc.coin_symbol)
+						if not nu:
+							npyscreen.notify_confirm('{} is not a valid address, LTB username or netki wallet')
+							return True
+						addy = nu
+					else:
+						npyscreen.notify_confirm('{} is not a valid address, LTB username or netki wallet')
+						return True
+				else:
+					addy = ltbu
+				
+				self.address.value = addy
+				self.address.update()
+				if not npyscreen.notify_yes_no('Really send {} BTC to {} with a {} BTC fee?'.format(str(amnt), str(addy), str(fee))):
+					return True
+				else:
+					self.on_send(amnt, fee, addy)
+					return False
+				return True
+			else:
+				return True
+			
+		except Exception:
+			npyscreen.notify_confirm('Invalid Address or Username')
+			self.address.value = ''
+			self.address.update()
+			return True
 
 class ReceiveViewForm(PluginForm, npyscreen.ActionFormV2):
 	def __init__(self, *args, **kwargs):
@@ -266,6 +355,8 @@ class Bitcoin(DefaultPluginForm):
 		downloaded_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOODHL')
 		uploaded_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'STANDOUT')
 		blkheight_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'STANDOUT')
+		confirmedbal_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOOD')
+		unconfirmed_col = curses.A_BOLD | self.parent.theme_manager.findPair(self, 'CAUTION')
 		
 		blktc = 'GOOD'
 		if self.tslb > 600: # 10m
@@ -362,11 +453,11 @@ class Bitcoin(DefaultPluginForm):
 		balance_str1 = 'Balance:    '
 		self.curses_pad.addstr(2, 2, balance_str1)
 		balance_str2 = '{} BTC'.format(str(self.balance))
-		self.curses_pad.addstr(2, 2 + len(balance_str1), balance_str2, curses.A_BOLD | self.parent.theme_manager.findPair(self, 'GOOD'))
+		self.curses_pad.addstr(2, 2 + len(balance_str1), balance_str2, confirmedbal_col)
 		if self.unconfirmed_balance is not None:
 			balance_str = balance_str1 + balance_str2
 			self.curses_pad.addstr(2, 2 + len(balance_str), ' / ', curses.A_BOLD)
-			self.curses_pad.addstr(2, 4 + len(balance_str), ' {} BTC'.format(self.unconfirmed_balance), curses.A_BOLD | self.parent.theme_manager.findPair(self, 'CAUTION'))
+			self.curses_pad.addstr(2, 4 + len(balance_str), ' {} BTC'.format(self.unconfirmed_balance), unconfirmed_col)
 		
 		super(Bitcoin, self).draw_form()
 	
@@ -417,10 +508,7 @@ class Bitcoin(DefaultPluginForm):
 		if check_tslb:
 			blkinfo = self.access.getblock( lx(self.access.getbestblockhash()) )
 			blkheader = blkinfo.get_header()
-			#self.tslb = blkheader.nTime
 			self.tslb = time.time() - blkheader.nTime
-			#tslb = datetime.datetime.utcnow() - datetime.datetime.fromtimestamp(blkheader.nTime)
-			#self.tslb = tslb.seconds // 60 % 60 # keep it in minutes
 		if check_peers:
 			btci = self.access.getnetworkinfo()
 			self.nodecount = btci['connections']
@@ -447,8 +535,8 @@ class Bitcoin(DefaultPluginForm):
 						conf_symbol =  u'\u2713 '
 					self.latest_tx_widget.values.append(json.dumps(
 						[
-							u'{}{}'.format(conf_symbol , tx['confirmations']), 
-							datetime.datetime.fromtimestamp(tx['time']).strftime('%a %d %b %Y @ %X'),
+							u'{}{}  '.format(conf_symbol , tx['confirmations']), 
+							datetime.datetime.fromtimestamp(tx['time']).strftime('%a %d %b %Y @ %X  '),
 							'{} BTC   {}   {}'.format(tx['amount'], whichway, addy)
 						]
 					))
@@ -490,7 +578,7 @@ class Bitcoin(DefaultPluginForm):
 		return f
 	
 	def on_send_view(self):
-		f = SendViewForm()
+		f = SendViewForm(self)
 		return f
 	
 	def on_receive_view(self):

@@ -38,8 +38,7 @@ class ExtendedTextfield(npyscreen.TextfieldUnicode):
 		return sret
 	
 	def display(self):
-		#super(ExtendedTextfield, self).display()
-		pass
+		super(ExtendedTextfield, self).display()
 
 class ExtendedMultiLine(npyscreen.MultiLine):
 	_contained_widgets = ExtendedTextfield
