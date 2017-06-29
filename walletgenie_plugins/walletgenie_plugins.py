@@ -513,7 +513,7 @@ class BasePluginCoin(BasePlugin):
 			self.output('requests module not found, netki lookup disabled -- enable it by installing requests: `pip install requests`')
 			return None
 		
-		url = 'https://netki.com/api/wallet_lookup/'
+		url = 'https://pubapi.netki.com/api/wallet_lookup/'
 		headers = {
 			'Host': 'netki.com', 'User-Agent': 'WalletGenie netki integration',
 			'Content-type': 'application/json'
